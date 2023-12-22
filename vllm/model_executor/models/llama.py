@@ -42,6 +42,8 @@ from vllm.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding, ParallelLMHead)
 from vllm.model_executor.parallel_utils.parallel_state import (
     get_tensor_model_parallel_world_size,get_pipeline_model_parallel_rank,get_pipeline_model_parallel_world_size)
+from vllm.model_executor.parallel_utils.pipeline_parallel import (
+    send_to_next_pp_rank, receive_from_prev_pp_rank)
 
 
 
@@ -327,8 +329,6 @@ class LlamaForCausalLM(nn.Module):
             input_ = input_ids
         else:
             shape = [*positions.shape, self.config.hidden_size]
-            # TODO: finish this method
-            assert 1
             input_ = receive_from_prev_pp_rank(shape, self.dtype)
         
         hidden_states = self.model(input_, positions, kv_caches, input_metadata, cache_events)
@@ -337,8 +337,6 @@ class LlamaForCausalLM(nn.Module):
             next_tokens = self.sample(hidden_states, input_metadata)
             return next_tokens
         else:
-            # TODO: finish this method
-            assert 1
             send_to_next_pp_rank(hidden_states)
             return None
 

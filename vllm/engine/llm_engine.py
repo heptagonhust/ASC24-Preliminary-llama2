@@ -599,7 +599,9 @@ class LLMEngine:
             blocks_to_swap_in=scheduler_outputs.blocks_to_swap_in,
             blocks_to_swap_out=scheduler_outputs.blocks_to_swap_out,
             blocks_to_copy=scheduler_outputs.blocks_to_copy,
+            get_all_outputs=True,
         )
+        output = output[-1]
 
         return self._process_model_outputs(output, scheduler_outputs)
 

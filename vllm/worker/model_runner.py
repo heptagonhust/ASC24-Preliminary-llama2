@@ -11,6 +11,8 @@ from vllm.model_executor import get_model, InputMetadata, SamplingMetadata
 from vllm.sampling_params import SamplingParams, SamplingType
 from vllm.sequence import SamplerOutput, SequenceData, SequenceGroupMetadata
 from vllm.utils import in_wsl
+from vllm.model_executor.parallel_utils.parallel_state import (
+    get_pipeline_model_parallel_rank)
 
 logger = init_logger(__name__)
 
@@ -391,7 +393,7 @@ class ModelRunner:
             seqs.append(seq)
 
         # Run the model with the dummy inputs.
-        num_layers = self.model_config.get_num_layers(self.parallel_config)
+        num_layers = self.model_config.get_num_layers(self.parallel_config,get_pipeline_model_parallel_rank())
         kv_caches = [(None, None)] * num_layers
         self.execute_model(seqs, kv_caches)
         torch.cuda.synchronize()
