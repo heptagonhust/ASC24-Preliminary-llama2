@@ -260,7 +260,7 @@ class LlamaModel(nn.Module):
         input_metadata: InputMetadata,
     ) -> torch.Tensor:
         hidden_states = self.embed_tokens(
-            last_input) if self.pp_rank == 0 else last_input
+            last_input) if self.pipeline_rank == 0 else last_input
     
         residual = None
         for i in range(len(self.layers)):
@@ -298,55 +298,66 @@ class LlamaForCausalLM(nn.Module):
             self.lm_head = ParallelLMHead(config.vocab_size,config.hidden_size)
             self.sampler = Sampler(config.vocab_size)
 
-    # def forward(
-    #     self,
-    #     input_ids: torch.Tensor,
-    #     positions: torch.Tensor,
-    #     kv_caches: List[KVCache],
-    #     input_metadata: InputMetadata,
-    # ) -> torch.Tensor:
-    #     hidden_states = self.model(input_ids, positions, kv_caches,
-    #                                input_metadata)
-    #     return hidden_states
-
-    # def sample(
-    #     self,
-    #     hidden_states: torch.Tensor,
-    #     sampling_metadata: SamplingMetadata,
-    # ) -> SamplerOutput:
-    #     next_tokens = self.sampler(self.lm_head.weight, hidden_states,
-    #                                sampling_metadata)
-    #     return next_tokens
     def forward(
         self,
         input_ids: torch.Tensor,
         positions: torch.Tensor,
         kv_caches: List[KVCache],
         input_metadata: InputMetadata,
-        cache_events: Optional[List[torch.cuda.Event]] = None
-    ) -> Optional[SamplerOutput]:
-        if self.pp_rank == 0:
+    ) -> torch.Tensor:
+        if self.pipeline_rank == 0:
             input_ = input_ids
         else:
             shape = [*positions.shape, self.config.hidden_size]
             input_ = receive_from_prev_pp_rank(shape, self.dtype)
         
-        hidden_states = self.model(input_, positions, kv_caches, input_metadata, cache_events)
-
-        if self.pp_rank == self.pp_size - 1:
-            next_tokens = self.sample(hidden_states, input_metadata)
-            return next_tokens
-        else:
+        hidden_states = self.model(input_, positions, kv_caches, input_metadata)
+        if self.pipeline_rank != self.pipeline_size - 1:
             send_to_next_pp_rank(hidden_states)
-            return None
+        return hidden_states
 
     def sample(
         self,
         hidden_states: torch.Tensor,
         sampling_metadata: SamplingMetadata,
     ) -> SamplerOutput:
-        next_tokens = self.sampler(self.lm_head.weight, hidden_states, sampling_metadata)
-        return next_tokens
+        if self.pipeline_rank == self.pipeline_size - 1:
+            next_tokens = self.sampler(self.lm_head.weight, hidden_states,
+                                    sampling_metadata)
+            return next_tokens
+        else:
+            return None
+    
+    # def forward(
+    #     self,
+    #     input_ids: torch.Tensor,
+    #     positions: torch.Tensor,
+    #     kv_caches: List[KVCache],
+    #     input_metadata: InputMetadata,
+    #     cache_events: Optional[List[torch.cuda.Event]] = None
+    # ) -> Optional[SamplerOutput]:
+    #     if self.pipeline_rank == 0:
+    #         input_ = input_ids
+    #     else:
+        #     shape = [*positions.shape, self.config.hidden_size]
+        #     input_ = receive_from_prev_pp_rank(shape, self.dtype)
+        
+        # hidden_states = self.model(input_, positions, kv_caches, input_metadata, cache_events)
+
+    #     if self.pipeline_rank == self.pipeline_size - 1:
+    #         next_tokens = self.sample(hidden_states, input_metadata)
+    #         return next_tokens
+    #     else:
+    #         send_to_next_pp_rank(hidden_states)
+    #         return None
+
+    # def sample(
+    #     self,
+    #     hidden_states: torch.Tensor,
+    #     sampling_metadata: SamplingMetadata,
+    # ) -> SamplerOutput:
+    #     next_tokens = self.sampler(self.lm_head.weight, hidden_states, sampling_metadata)
+    #     return next_tokens
 
     def load_weights(self,
                      model_name_or_path: str,
