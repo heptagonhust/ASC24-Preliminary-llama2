@@ -393,7 +393,7 @@ class ModelRunner:
             seqs.append(seq)
 
         # Run the model with the dummy inputs.
-        num_layers = self.model_config.get_num_layers(self.parallel_config,get_pipeline_model_parallel_rank())
+        num_layers = self.model_config.get_num_layers(self.parallel_config, get_pipeline_model_parallel_rank())
         kv_caches = [(None, None)] * num_layers
         self.execute_model(seqs, kv_caches)
         torch.cuda.synchronize()
