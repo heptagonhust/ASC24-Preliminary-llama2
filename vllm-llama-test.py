@@ -8,6 +8,7 @@ with open("./scrambled_sampled_dataset.json", "r") as f:
 prompt_list = []
 for src in data:
     prompt_list.append(src[0])
+prompt_list = prompt_list[:100]
 
 sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
 outputs = llm.generate(prompt_list, sampling_params)

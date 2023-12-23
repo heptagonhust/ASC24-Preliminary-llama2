@@ -41,9 +41,12 @@ from vllm.model_executor.layers.sampler import Sampler
 from vllm.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding, ParallelLMHead)
 from vllm.model_executor.parallel_utils.parallel_state import (
-    get_tensor_model_parallel_world_size,get_pipeline_model_parallel_rank,get_pipeline_model_parallel_world_size)
+    get_tensor_model_parallel_world_size,
+    get_pipeline_model_parallel_rank,
+    get_pipeline_model_parallel_world_size)
 from vllm.model_executor.parallel_utils.pipeline_parallel import (
-    send_to_next_pp_rank, receive_from_prev_pp_rank)
+    send_to_next_pp_rank, 
+    receive_from_prev_pp_rank)
 
 
 
@@ -244,6 +247,7 @@ class LlamaModel(nn.Module):
                 config.hidden_size,
             )
         
+        # ! Does it have any effect on the index of corresponding weight?
         self.layers = nn.ModuleList([
             LlamaDecoderLayer(config, linear_method)
             for _ in range(config.num_hidden_layers // self.pipeline_size + (self.pipeline_rank < config.num_hidden_layers % self.pipeline_size))
@@ -259,6 +263,14 @@ class LlamaModel(nn.Module):
         kv_caches: List[KVCache],
         input_metadata: InputMetadata,
     ) -> torch.Tensor:
+        """Forward
+
+        Args:
+            last_input (_type_): The input from previous stage
+            positions (torch.Tensor): _description_
+            kv_caches (List[KVCache]): _description_
+            input_metadata (InputMetadata): _description_
+        """
         hidden_states = self.embed_tokens(
             last_input) if self.pipeline_rank == 0 else last_input
     
@@ -272,6 +284,7 @@ class LlamaModel(nn.Module):
                 input_metadata,
                 residual,
             )
+        # * This is very important, since residual must be correctly passed
         if self.pipeline_rank == self.pipeline_size - 1:
             hidden_states,_ = self.norm(hidden_states,residual)
         else:
