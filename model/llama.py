@@ -35,7 +35,7 @@ from model.linear import (LinearMethodBase,
                           MergedColumnParallelLinear,
                           QKVParallelLinear,
                           RowParallelLinear)
-from model.embedding import get_rope
+from model.embedding import RotaryEmbedding
 from model.sampler import Sampler
 from vllm.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding, ParallelLMHead)
@@ -129,13 +129,12 @@ class LlamaAttention(nn.Module):
             linear_method=linear_method,
         )
 
-        self.rotary_emb = get_rope(
-            self.head_dim,
-            rotary_dim=self.head_dim,
-            max_position=max_position_embeddings,
+        self.rotary_emb = RotaryEmbedding(
+            head_dim=self.head_dim,
+            max_position_embeddings=max_position_embeddings,
             base=rope_theta,
-            rope_scaling=rope_scaling,
         )
+
         self.attn = PagedAttention(self.num_heads,
                                    self.head_dim,
                                    self.scaling,
