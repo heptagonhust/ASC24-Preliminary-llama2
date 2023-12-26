@@ -6,17 +6,17 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
 #! rewrite needed
-from vllm.model_executor.parallel_utils.parallel_state import (
+from utils.parallel_state import (
     get_tensor_model_parallel_rank, get_tensor_model_parallel_world_size)
-from vllm.model_executor.parallel_utils.communication_op import (
+from utils.communication_op import (
     tensor_model_parallel_all_reduce, tensor_model_parallel_all_gather)
-from vllm.model_executor.parallel_utils.utils import (
+from utils.utils import (
     divide, split_tensor_along_last_dim)
 
-from vllm.model_executor.utils import set_weight_attrs
-from vllm.logger import init_logger
+from utils.utils import set_weight_attrs
+# from vllm.logger import init_logger
 
-logger = init_logger(__name__)
+# logger = init_logger(__name__)
 
 
 class LinearMethodBase(ABC):
@@ -47,9 +47,6 @@ class UnquantizedLinearMethod(LinearMethodBase):
                            multiplication.
     """
 
-    def __init__(self, separate_bias_add: bool = False):
-        self.separate_bias_add = separate_bias_add
-
     def create_weights(self, input_size_per_partition: int,
                        output_size_per_partition: int, input_size: int,
                        output_size: int,
@@ -64,14 +61,9 @@ class UnquantizedLinearMethod(LinearMethodBase):
 
     def apply_weights(self,
                       weights: Dict[str, torch.Tensor],
-                      x: torch.Tensor,
-                      bias: Optional[torch.Tensor] = None) -> torch.Tensor:
+                      x: torch.Tensor) -> torch.Tensor:
         weight = weights["weight"]
-        if self.separate_bias_add:
-            if bias:
-                return F.linear(x, weight) + bias
-            return F.linear(x, weight)
-        return F.linear(x, weight, bias)
+        return F.linear(x, weight)  # 
 
 
 class ColumnParallelLinear(torch.nn.Module):
@@ -127,17 +119,8 @@ class ColumnParallelLinear(torch.nn.Module):
             if isinstance(weight, torch.Tensor):
                 self.register_parameter(name, weight)
                 set_weight_attrs(weight, {"weight_loader": self.weight_loader})
-        if bias:
-            self.bias = Parameter(
-                torch.empty(self.output_size_per_partition,
-                            device=torch.cuda.current_device(),
-                            dtype=params_dtype))
-            set_weight_attrs(self.bias, {
-                "output_dim": 0,
-                "weight_loader": self.weight_loader,
-            })
-        else:
-            self.register_parameter("bias", None)
+
+        self.register_parameter("bias", None)
 
     def weight_loader(self, param: Parameter, loaded_weight: torch.Tensor):
         tp_rank = get_tensor_model_parallel_rank()
@@ -152,18 +135,16 @@ class ColumnParallelLinear(torch.nn.Module):
         param_data.copy_(loaded_weight)
 
     def forward(self, input_):
-        bias = self.bias if not self.skip_bias_add else None
-
         # Matrix multiply.
         output_parallel = self.linear_method.apply_weights(
-            self.linear_weights, input_, bias)
+            self.linear_weights, input_)
         if self.gather_output:
             # All-gather across the partitions.
             output = tensor_model_parallel_all_gather(output_parallel)
         else:
             output = output_parallel
-        output_bias = self.bias if self.skip_bias_add else None
-        return output, output_bias
+
+        return output
 
 
 class MergedColumnParallelLinear(ColumnParallelLinear):
@@ -249,13 +230,6 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
             start_idx = tp_rank * shard_size
             loaded_weight = loaded_weight.narrow(output_dim, start_idx,
                                                  shard_size)
-        else:
-            ignore_warning = getattr(param, "ignore_warning", False)
-            if not ignore_warning:
-                logger.warning(
-                    "Loading a weight without `output_dim` attribute in "
-                    "MergedColumnParallelLinear, assume the weight is "
-                    "the same for all partitions.")
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
 
@@ -304,13 +278,9 @@ class QKVParallelLinear(ColumnParallelLinear):
         # Divide the weight matrix along the last dimension.
         tp_size = get_tensor_model_parallel_world_size()
         self.num_heads = divide(self.total_num_heads, tp_size)
-        if tp_size >= self.total_num_kv_heads:
-            self.num_kv_heads = 1
-            self.num_kv_head_replicas = divide(tp_size,
-                                               self.total_num_kv_heads)
-        else:
-            self.num_kv_heads = divide(self.total_num_kv_heads, tp_size)
-            self.num_kv_head_replicas = 1
+
+        self.num_kv_heads = divide(self.total_num_kv_heads, tp_size)
+        self.num_kv_head_replicas = 1
         input_size = self.hidden_size
         output_size = (self.num_heads +
                        2 * self.num_kv_heads) * tp_size * self.head_size
@@ -374,13 +344,7 @@ class QKVParallelLinear(ColumnParallelLinear):
             start_idx = shard_id * shard_size
             loaded_weight = loaded_weight.narrow(output_dim, start_idx,
                                                  shard_size)
-        else:
-            ignore_warning = getattr(param, "ignore_warning", False)
-            if not ignore_warning:
-                logger.warning(
-                    "Loading a weight without `output_dim` attribute in "
-                    "QKVParallelLinear, assume the weight is the same "
-                    "for all partitions.")
+
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
 
@@ -447,21 +411,7 @@ class RowParallelLinear(torch.nn.Module):
                 self.register_parameter(name, weight)
                 set_weight_attrs(weight, {"weight_loader": self.weight_loader})
 
-        if not reduce_results and (bias and not skip_bias_add):
-            raise ValueError("When not reduce the results, adding bias to the "
-                             "results can lead to incorrect results")
-
-        if bias:
-            self.bias = Parameter(
-                torch.empty(self.output_size,
-                            device=torch.cuda.current_device(),
-                            dtype=params_dtype))
-            set_weight_attrs(self.bias, {
-                "output_dim": 0,
-                "weight_loader": self.weight_loader,
-            })
-        else:
-            self.register_parameter("bias", None)
+        self.register_parameter("bias", None)
 
     def weight_loader(self, param: Parameter, loaded_weight: torch.Tensor):
         tp_rank = get_tensor_model_parallel_rank()
@@ -493,10 +443,5 @@ class RowParallelLinear(torch.nn.Module):
         else:
             output_ = output_parallel
 
-        if not self.skip_bias_add:
-            output = output_ + self.bias if self.bias is not None else output_
-            output_bias = None
-        else:
-            output = output_
-            output_bias = self.bias
-        return output, output_bias
+        output = output_
+        return output
