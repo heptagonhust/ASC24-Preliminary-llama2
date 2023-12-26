@@ -37,7 +37,7 @@ from model.linear import (LinearMethodBase,
                           RowParallelLinear)
 from model.embedding import RotaryEmbedding
 from model.sampler import Sampler
-from vllm.model_executor.layers.vocab_parallel_embedding import (
+from model.vocab_parallel_embedding import (
     VocabParallelEmbedding, ParallelLMHead)
 from vllm.model_executor.parallel_utils.parallel_state import (
     get_tensor_model_parallel_world_size)
