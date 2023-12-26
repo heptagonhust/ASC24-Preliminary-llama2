@@ -5,11 +5,11 @@ import torch
 import torch.nn as nn
 
 #! requires rewriting
-from vllm.model_executor.parallel_utils.communication_op import (
+from utils.communication_op import (
     tensor_model_parallel_all_gather)
-from vllm.model_executor.sampling_metadata import SamplingMetadata, SamplingTensors
-from vllm.sampling_params import SamplingParams, SamplingType
-from vllm.sequence import (PromptLogprobs, SampleLogprobs, SamplerOutput,
+from utils.sampling_metadata import SamplingMetadata, SamplingTensors
+from utils.sampling_params import SamplingParams, SamplingType
+from utils.sequence import (PromptLogprobs, SampleLogprobs, SamplerOutput,
                            SequenceData, SequenceGroupOutput, SequenceOutput)
 
 
