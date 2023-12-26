@@ -4,12 +4,14 @@ import torch
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
-from vllm.model_executor.parallel_utils.parallel_state import (
+from utils.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from vllm.model_executor.parallel_utils.communication_op import (
+from utils.communication_op import (
     tensor_model_parallel_all_reduce)
+
+from utils.utils import divide, set_weight_attrs
 
 
 def pad_vocab_size(vocab_size: int, pad_to: int = 64) -> int:
@@ -24,45 +26,12 @@ def vocab_range_from_per_partition_vocab_size(per_partition_vocab_size: int,
     return index_f, index_l
 
 
-def ensure_divisibility(numerator, denominator):
-    """Ensure that numerator is divisible by the denominator."""
-    assert numerator % denominator == 0, "{} is not divisible by {}".format(
-        numerator, denominator)
-
-
-def divide(numerator, denominator):
-    """Ensure that numerator is divisible by the denominator and return
-    the division value."""
-    ensure_divisibility(numerator, denominator)
-    return numerator // denominator
-
 
 def vocab_range_from_global_vocab_size(global_vocab_size: int, rank: int,
                                        world_size: int) -> Sequence[int]:
     per_partition_vocab_size = divide(global_vocab_size, world_size)
     return vocab_range_from_per_partition_vocab_size(per_partition_vocab_size,
                                                      rank)
-
-
-def set_weight_attrs(
-    weight: torch.Tensor,
-    weight_attrs: Optional[Dict[str, Any]],
-):
-    """Set attributes on a weight tensor.
-
-    This method is used to set attributes on a weight tensor. This method
-    will not overwrite existing attributes.
-
-    Args:
-        weight: The weight tensor.
-        weight_attrs: A dictionary of attributes to set on the weight tensor.
-    """
-    if weight_attrs is None:
-        return
-    for key, value in weight_attrs.items():
-        assert not hasattr(
-            weight, key), (f"Overwriting existing tensor attribute: {key}")
-        setattr(weight, key, value)
 
 
 class VocabParallelEmbedding(torch.nn.Module):
