@@ -27,7 +27,7 @@ import torch
 from torch import nn
 from transformers import LlamaConfig
 
-from vllm.model_executor.input_metadata import InputMetadata
+from model.input_metadata import InputMetadata
 from model.activate import SiluAndMul
 from model.attention import PagedAttention
 from model.layernorm import RMSNorm
@@ -39,7 +39,7 @@ from model.embedding import RotaryEmbedding
 from model.sampler import Sampler
 from model.vocab_parallel_embedding import (
     VocabParallelEmbedding, ParallelLMHead)
-from vllm.model_executor.parallel_utils.parallel_state import (
+from utils.parallel_state import (
     get_tensor_model_parallel_world_size)
 from vllm.model_executor.sampling_metadata import SamplingMetadata
 from vllm.model_executor.weight_utils import (default_weight_loader,
