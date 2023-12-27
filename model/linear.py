@@ -136,6 +136,7 @@ class ColumnParallelLinear(torch.nn.Module):
 
     def forward(self, input_):
         # Matrix multiply.
+        #! output_parallel is the corresponding partition of this tp rank
         output_parallel = self.linear_method.apply_weights(
             self.linear_weights, input_)
         if self.gather_output:
@@ -282,6 +283,9 @@ class QKVParallelLinear(ColumnParallelLinear):
         self.num_kv_heads = divide(self.total_num_kv_heads, tp_size)
         self.num_kv_head_replicas = 1
         input_size = self.hidden_size
+        #! output dimension will be partitioned in the initialize of parent class
+        #!     each tp GPU is responsible for a (num_heads+2*num_kv_heads) * head_size
+        #!     dimension output
         output_size = (self.num_heads +
                        2 * self.num_kv_heads) * tp_size * self.head_size
         super().__init__(input_size, output_size, bias, False, skip_bias_add,

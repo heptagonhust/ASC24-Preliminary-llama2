@@ -4,7 +4,6 @@ from typing import Dict, List, Optional, Tuple
 import torch
 import torch.nn as nn
 
-#! requires rewriting
 from utils.communication_op import (
     tensor_model_parallel_all_gather)
 from utils.sampling_metadata import SamplingMetadata, SamplingTensors

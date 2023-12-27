@@ -1,10 +1,12 @@
 # coding=utf-8
 # Adapted from
-# https://github.com/huggingface/transformers/blob/v4.28.0/src/transformers/models/llama/modeling_llama.py
+# Copyright 2024 Hust-heptagon team
 # Copyright 2023 The vLLM team.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
+# https://github.com/huggingface/transformers/blob/v4.33.2/src/transformers/models/llama/modeling_llama.py
+# https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/layers/rotary_embedding.py
 #
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
+# This code is based on vllm library, EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
 # original forms to accommodate minor architectural differences compared
 # to GPT-NeoX and OPT used by the Meta AI team that trained the model.
@@ -29,7 +31,7 @@ from transformers import LlamaConfig
 
 from model.input_metadata import InputMetadata
 from model.activate import SiluAndMul
-from model.attention import PagedAttention
+from model.attention import GroupAttention
 from model.layernorm import RMSNorm
 from model.linear import (LinearMethodBase, 
                           MergedColumnParallelLinear,
@@ -78,6 +80,7 @@ class LlamaMLP(nn.Module):
         return x
 
 
+#! 64 heads, 8 kv heads in llama 70B
 class LlamaAttention(nn.Module):
 
     def __init__(
@@ -95,6 +98,7 @@ class LlamaAttention(nn.Module):
         tp_size = get_tensor_model_parallel_world_size()
         self.total_num_heads = num_heads
         assert self.total_num_heads % tp_size == 0
+        #! heads per tensor paralleled GPU
         self.num_heads = self.total_num_heads // tp_size
         self.total_num_kv_heads = num_kv_heads
         if self.total_num_kv_heads >= tp_size:
@@ -105,14 +109,18 @@ class LlamaAttention(nn.Module):
             # Number of KV heads is less than TP size, so we replicate
             # the KV heads across multiple tensor parallel GPUs.
             assert tp_size % self.total_num_kv_heads == 0
+        #! kv heads per tensor paralleled GPU
         self.num_kv_heads = max(1, self.total_num_kv_heads // tp_size)
+        #! dimension of token vector of each head
         self.head_dim = hidden_size // self.total_num_heads
+        #! dimension of sum of query vectors of each tp GPU
         self.q_size = self.num_heads * self.head_dim
         self.kv_size = self.num_kv_heads * self.head_dim
         self.scaling = self.head_dim**-0.5
         self.rope_theta = rope_theta
         self.max_position_embeddings = max_position_embeddings
 
+        #! project raw token vec to qkv vector
         self.qkv_proj = QKVParallelLinear(
             hidden_size,
             self.head_dim,
@@ -134,9 +142,10 @@ class LlamaAttention(nn.Module):
             base=rope_theta,
         )
 
-        self.attn = PagedAttention(self.num_heads,
+        self.attn = GroupAttention(self.num_heads,
                                    self.head_dim,
                                    self.scaling,
+                                   max_position_embeddings = max_position_embeddings,
                                    num_kv_heads=self.num_kv_heads)
 
     def forward(
@@ -146,8 +155,23 @@ class LlamaAttention(nn.Module):
         kv_cache: KVCache,
         input_metadata: InputMetadata,
     ) -> torch.Tensor:
+        """Attention Layer forward pass.
+
+        Args:
+            positions: shape = [batch_size, seq_len]
+            hidden_states: shape = [batch_size, seq_len, hidden_size]
+            kv_cache (KVCache): Tuple[k_cache, v_cache]
+            input_metadata (InputMetadata): 
+
+        Returns:
+            torch.Tensor: _description_
+        """
+        #! qkv: [batch_size, seq_len, tp_q_size + 2 * tp_kv_size]
         qkv, _ = self.qkv_proj(hidden_states)
+        #! q: [batch_size, seq_len, tp_q_size]
+        #! k,v: [batch_size, seq_len, tp_kv_size]
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        #! rotary embedding encoding for key & value
         q, k = self.rotary_emb(positions, q, k)
         k_cache, v_cache = kv_cache
         attn_output = self.attn(q, k, v, k_cache, v_cache, input_metadata)
