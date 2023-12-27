@@ -5,12 +5,17 @@ import torch.distributed as dist
 
 from vllm.model_executor.parallel_utils.parallel_state import (
     get_pipeline_model_parallel_prev_rank,
-    get_pipeline_model_parallel_next_rank)
+    get_pipeline_model_parallel_next_rank,
+    get_pipeline_model_parallel_rank)
 
 Shape = Union[List[int], torch.Size]
 
 
 def send_to_next_pp_rank(tensor: torch.Tensor) -> None:
+    print("sb")
+    print(get_pipeline_model_parallel_rank())
+    print(get_pipeline_model_parallel_next_rank())
+    # print(tensor)
     dist.send(tensor, get_pipeline_model_parallel_next_rank())
 
 

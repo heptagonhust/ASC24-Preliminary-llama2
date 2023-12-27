@@ -41,9 +41,12 @@ from vllm.model_executor.layers.sampler import Sampler
 from vllm.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding, ParallelLMHead)
 from vllm.model_executor.parallel_utils.parallel_state import (
-    get_tensor_model_parallel_world_size,get_pipeline_model_parallel_rank,get_pipeline_model_parallel_world_size)
+    get_tensor_model_parallel_world_size,
+    get_pipeline_model_parallel_rank,
+    get_pipeline_model_parallel_world_size)
 from vllm.model_executor.parallel_utils.pipeline_parallel import (
-    send_to_next_pp_rank, receive_from_prev_pp_rank)
+    send_to_next_pp_rank, 
+    receive_from_prev_pp_rank)
 
 
 
@@ -244,6 +247,7 @@ class LlamaModel(nn.Module):
                 config.hidden_size,
             )
         
+        # ! Does it have any effect on the index of corresponding weight?
         self.layers = nn.ModuleList([
             LlamaDecoderLayer(config, linear_method)
             for _ in range(config.num_hidden_layers // self.pipeline_size + (self.pipeline_rank < config.num_hidden_layers % self.pipeline_size))
@@ -259,6 +263,14 @@ class LlamaModel(nn.Module):
         kv_caches: List[KVCache],
         input_metadata: InputMetadata,
     ) -> torch.Tensor:
+        """Forward
+
+        Args:
+            last_input (_type_): The input from previous stage
+            positions (torch.Tensor): _description_
+            kv_caches (List[KVCache]): _description_
+            input_metadata (InputMetadata): _description_
+        """
         hidden_states = self.embed_tokens(
             last_input) if self.pipeline_rank == 0 else last_input
     
@@ -272,6 +284,7 @@ class LlamaModel(nn.Module):
                 input_metadata,
                 residual,
             )
+        # * This is very important, since residual must be correctly passed
         if self.pipeline_rank == self.pipeline_size - 1:
             hidden_states,_ = self.norm(hidden_states,residual)
         else:
@@ -291,6 +304,7 @@ class LlamaForCausalLM(nn.Module):
         self.config = config
         self.linear_method = linear_method
         self.model = LlamaModel(config, linear_method)
+
         self.dtype = torch.get_default_dtype()
         self.pipeline_rank = get_pipeline_model_parallel_rank()
         self.pipeline_size = get_pipeline_model_parallel_world_size()
@@ -308,6 +322,7 @@ class LlamaForCausalLM(nn.Module):
         if self.pipeline_rank == 0:
             input_ = input_ids
         else:
+            # ? Why this shape?
             shape = [*positions.shape, self.config.hidden_size]
             input_ = receive_from_prev_pp_rank(shape, self.dtype)
         
@@ -326,38 +341,10 @@ class LlamaForCausalLM(nn.Module):
                                     sampling_metadata)
             return next_tokens
         else:
+            # The other ray actors but the last one will return None
+            # It won't cause error to return None, since the ray workers will invode `execute_model` only
+            # and only one vllm engine is running on the head node
             return None
-    
-    # def forward(
-    #     self,
-    #     input_ids: torch.Tensor,
-    #     positions: torch.Tensor,
-    #     kv_caches: List[KVCache],
-    #     input_metadata: InputMetadata,
-    #     cache_events: Optional[List[torch.cuda.Event]] = None
-    # ) -> Optional[SamplerOutput]:
-    #     if self.pipeline_rank == 0:
-    #         input_ = input_ids
-    #     else:
-        #     shape = [*positions.shape, self.config.hidden_size]
-        #     input_ = receive_from_prev_pp_rank(shape, self.dtype)
-        
-        # hidden_states = self.model(input_, positions, kv_caches, input_metadata, cache_events)
-
-    #     if self.pipeline_rank == self.pipeline_size - 1:
-    #         next_tokens = self.sample(hidden_states, input_metadata)
-    #         return next_tokens
-    #     else:
-    #         send_to_next_pp_rank(hidden_states)
-    #         return None
-
-    # def sample(
-    #     self,
-    #     hidden_states: torch.Tensor,
-    #     sampling_metadata: SamplingMetadata,
-    # ) -> SamplerOutput:
-    #     next_tokens = self.sampler(self.lm_head.weight, hidden_states, sampling_metadata)
-    #     return next_tokens
 
     def load_weights(self,
                      model_name_or_path: str,
@@ -374,9 +361,9 @@ class LlamaForCausalLM(nn.Module):
         ]
         params_dict = dict(self.named_parameters())
         
-        per_node_num = self.config.num_hidden_layers // self.pipeline_size
-        id_begin = (self.pipeline_rank * per_node_num + min(self.pipeline_rank,self.config.num_hidden_layers % self.pipeline_size))
-        id_end = ((self.pipeline_rank + 1) * per_node_num + min(self.pipeline_rank + 1,self.config.num_hidden_layers % self.pipeline_size))
+        layers_per_stage = self.config.num_hidden_layers // self.pipeline_size
+        id_begin = (self.pipeline_rank * layers_per_stage + min(self.pipeline_rank, self.config.num_hidden_layers % self.pipeline_size))
+        id_end = ((self.pipeline_rank + 1) * layers_per_stage + min(self.pipeline_rank + 1,self.config.num_hidden_layers % self.pipeline_size))
         
         
         for name, loaded_weight in hf_model_weights_iterator(

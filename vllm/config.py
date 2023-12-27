@@ -200,6 +200,7 @@ class ModelConfig:
                 " must be divisible by tensor parallel size "
                 f"({tensor_parallel_size}).")
 
+        # # ! This may cause severe error when we use 3 nodes to run
         # total_num_hidden_layers = self.hf_config.num_hidden_layers
         # pipeline_parallel_size = parallel_config.pipeline_parallel_size
         # if total_num_hidden_layers % pipeline_parallel_size != 0:
@@ -265,9 +266,16 @@ class ModelConfig:
         return max(1,
                    total_num_kv_heads // parallel_config.tensor_parallel_size)
 
-    def get_num_layers(self, parallel_config: "ParallelConfig",pipeline_rank: int) -> int:
+    def get_num_layers(self, parallel_config: "ParallelConfig", pipeline_rank: int) -> int:
+        """Get number of layers according to passed pipeline rank.
+        
+        If we have 8 layers and 3 stages for example, the division would be
+        
+        0 1 2 | 3 4 5 | 6 7
+        """
         total_num_hidden_layers = self.hf_config.num_hidden_layers
-        return (total_num_hidden_layers // parallel_config.pipeline_parallel_size +(pipeline_rank <total_num_hidden_layers % parallel_config.pipeline_parallel_size))
+        return (total_num_hidden_layers // parallel_config.pipeline_parallel_size +
+                (pipeline_rank < total_num_hidden_layers % parallel_config.pipeline_parallel_size))
 
 
 class CacheConfig:
