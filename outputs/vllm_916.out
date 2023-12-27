@@ -1,0 +1,373 @@
+2023-12-23 09:20:57,754	INFO usage_lib.py:421 -- Usage stats collection is enabled. To disable this, add `--disable-usage-stats` to the command that starts the cluster, or run the following command: `ray disable-usage-stats` before starting the cluster. See https://docs.ray.io/en/master/cluster/usage-stats.html for more details.
+2023-12-23 09:20:57,755	INFO scripts.py:744 -- Local node IP: 192.168.251.101
+2023-12-23 09:20:59,852	SUCC scripts.py:781 -- --------------------
+2023-12-23 09:20:59,852	SUCC scripts.py:782 -- Ray runtime started.
+2023-12-23 09:20:59,852	SUCC scripts.py:783 -- --------------------
+2023-12-23 09:20:59,852	INFO scripts.py:785 -- Next steps
+2023-12-23 09:20:59,852	INFO scripts.py:788 -- To add another node to this Ray cluster, run
+2023-12-23 09:20:59,852	INFO scripts.py:791 --   ray start --address='192.168.251.101:6379'
+2023-12-23 09:20:59,852	INFO scripts.py:800 -- To connect to this Ray cluster:
+2023-12-23 09:20:59,855	INFO scripts.py:802 -- import ray
+2023-12-23 09:20:59,855	INFO scripts.py:803 -- ray.init(_node_ip_address='192.168.251.101')
+2023-12-23 09:20:59,855	INFO scripts.py:834 -- To terminate the Ray runtime, run
+2023-12-23 09:20:59,855	INFO scripts.py:835 --   ray stop
+2023-12-23 09:20:59,855	INFO scripts.py:838 -- To view the status of the cluster, use
+2023-12-23 09:20:59,855	INFO scripts.py:839 --   ray status
+2023-12-23 09:21:02,670	INFO scripts.py:926 -- Local node IP: 192.168.251.105
+2023-12-23 09:21:02,702	SUCC scripts.py:939 -- --------------------
+2023-12-23 09:21:02,702	SUCC scripts.py:940 -- Ray runtime started.
+2023-12-23 09:21:02,702	SUCC scripts.py:941 -- --------------------
+2023-12-23 09:21:02,702	INFO scripts.py:943 -- To terminate the Ray runtime, run
+2023-12-23 09:21:02,702	INFO scripts.py:944 --   ray stop
+2023-12-23 09:21:02,743	INFO scripts.py:926 -- Local node IP: 192.168.251.104
+2023-12-23 09:21:02,777	SUCC scripts.py:939 -- --------------------
+2023-12-23 09:21:02,777	SUCC scripts.py:940 -- Ray runtime started.
+2023-12-23 09:21:02,777	SUCC scripts.py:941 -- --------------------
+2023-12-23 09:21:02,778	INFO scripts.py:943 -- To terminate the Ray runtime, run
+2023-12-23 09:21:02,778	INFO scripts.py:944 --   ray stop
+INFO 12-23 09:21:50 llm_engine.py:73] Initializing an LLM engine with config: model='/data/70B-chat-hf', tokenizer='/data/70B-chat-hf', tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.float16, max_seq_len=4096, download_dir=None, load_format=auto, tensor_parallel_size=2, pipeline_parallel_size=3quantization=None, enforce_eager=False, seed=0)
+[36m(RayWorkerVllm pid=738303)[0m hepgpu1:738303:738303 [0] NCCL INFO NCCL_SOCKET_IFNAME set by environment to ^lo,docker,veth
+[36m(RayWorkerVllm pid=738303)[0m hepgpu1:738303:738303 [0] NCCL INFO Bootstrap : Using ens25f0:192.168.250.101<0>
+[36m(RayWorkerVllm pid=738303)[0m hepgpu1:738303:738303 [0] NCCL INFO NET/Plugin : Plugin load (libnccl-net.so) returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory
+[36m(RayWorkerVllm pid=738303)[0m hepgpu1:738303:738303 [0] NCCL INFO NET/Plugin : No plugin found, using internal implementation
+[36m(RayWorkerVllm pid=738303)[0m hepgpu1:738303:738303 [0] NCCL INFO cudaDriverVersion 12020
+[36m(RayWorkerVllm pid=738303)[0m NCCL version 2.18.1+cuda12.1
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO NET/IB : Using [0]ibp227s0:1/IB [1]ibp101s0:1/IB ; OOB ens25f0:192.168.250.102<0>
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Using network IB
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Trees [0] -1/-1/-1->3->2 [1] 2/-1/-1->3->4 [2] -1/-1/-1->3->2 [3] 2/1/-1->3->-1
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO P2P Chunksize set to 131072
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Channel 00/0 : 3[b1000] -> 4[4b000] [send] via NET/IB/1
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Channel 01/0 : 3[b1000] -> 4[4b000] [send] via NET/IB/0
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Channel 02/0 : 3[b1000] -> 4[4b000] [send] via NET/IB/1
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Channel 03/0 : 3[b1000] -> 4[4b000] [send] via NET/IB/0
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Connected all rings
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Channel 03/0 : 1[b1000] -> 3[b1000] [receive] via NET/IB/0
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Channel 03/0 : 3[b1000] -> 1[b1000] [send] via NET/IB/0
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Channel 01/0 : 4[4b000] -> 3[b1000] [receive] via NET/IB/0
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Channel 00 : 3[b1000] -> 2[4b000] via SHM/direct/direct
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Channel 01 : 3[b1000] -> 2[4b000] via SHM/direct/direct
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Channel 02 : 3[b1000] -> 2[4b000] via SHM/direct/direct
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Channel 03 : 3[b1000] -> 2[4b000] via SHM/direct/direct
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO Connected all trees
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO threadThresholds 8/8/64 | 48/8/64 | 512 | 512
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO 4 coll channels, 0 nvls channels, 4 p2p channels, 2 p2p channels per peer
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO comm 0x90da870 rank 3 nranks 6 cudaDev 1 busId b1000 commId 0x759a5d02dbba478 - Init COMPLETE
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282386 [1] NCCL INFO NCCL_SOCKET_IFNAME set by environment to ^lo,docker,veth[32m [repeated 2x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/ray-logging.html#log-deduplication for more options.)[0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282220 [1] NCCL INFO Bootstrap : Using ens25f0:192.168.250.102<0>
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282220 [1] NCCL INFO NET/Plugin : Plugin load (libnccl-net.so) returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282220 [1] NCCL INFO NET/Plugin : No plugin found, using internal implementation
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282220 [1] NCCL INFO cudaDriverVersion 12020
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m hepgpu2:282219:282219 [0] NCCL INFO cudaDriverVersion 12020
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m hepgpu2:282219:282219 [0] NCCL INFO Bootstrap : Using ens25f0:192.168.250.102<0>
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m hepgpu2:282219:282219 [0] NCCL INFO NET/Plugin : Plugin load (libnccl-net.so) returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m hepgpu2:282219:282219 [0] NCCL INFO NET/Plugin : No plugin found, using internal implementation
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m hepgpu2:282219:282387 [0] NCCL INFO Setting affinity for GPU 0 to 01,00000000,00000001
+[36m(RayWorkerVllm pid=738303)[0m hepgpu1:738303:738987 [0] NCCL INFO Channel 00/04 :    0   1   2   3   4   5
+[36m(RayWorkerVllm pid=738303)[0m hepgpu1:738303:738987 [0] NCCL INFO Channel 01/04 :    0   1   2   3   4   5
+[36m(RayWorkerVllm pid=738303)[0m hepgpu1:738303:738987 [0] NCCL INFO Channel 02/04 :    0   1   2   3   4   5
+[36m(RayWorkerVllm pid=738303)[0m hepgpu1:738303:738987 [0] NCCL INFO Channel 03/04 :    0   1   2   3   4   5
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738988 [1] NCCL INFO NET/IB : Using [0]mlx5_1:1/IB [1]mlx5_0:1/IB ; OOB ens25f0:192.168.250.101<0>[32m [repeated 5x across cluster][0m
+[36m(RayWorkerVllm pid=738303)[0m hepgpu1:738303:739052 [0] NCCL INFO Using network IB[32m [repeated 6x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738988 [1] NCCL INFO Trees [0] -1/-1/-1->1->0 [1] 0/5/-1->1->-1 [2] 4/-1/-1->1->0 [3] 0/-1/-1->1->3[32m [repeated 5x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738988 [1] NCCL INFO P2P Chunksize set to 131072[32m [repeated 5x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738988 [1] NCCL INFO Channel 01/0 : 1[b1000] -> 5[b1000] [send] via NET/IB/0[32m [repeated 21x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738988 [1] NCCL INFO Connected all rings[32m [repeated 5x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738988 [1] NCCL INFO Channel 03/0 : 3[b1000] -> 1[b1000] [receive] via NET/IB/0[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738988 [1] NCCL INFO Channel 03 : 1[b1000] -> 0[4b000] via SHM/direct/direct[32m [repeated 20x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738988 [1] NCCL INFO Connected all trees[32m [repeated 5x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738988 [1] NCCL INFO threadThresholds 8/8/64 | 48/8/64 | 512 | 512[32m [repeated 5x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738988 [1] NCCL INFO 4 coll channels, 0 nvls channels, 4 p2p channels, 2 p2p channels per peer[32m [repeated 5x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738988 [1] NCCL INFO comm 0x88ef2c0 rank 1 nranks 6 cudaDev 1 busId b1000 commId 0x759a5d02dbba478 - Init COMPLETE[32m [repeated 5x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738988 [1] NCCL INFO NCCL_SOCKET_IFNAME set by environment to ^lo,docker,veth[32m [repeated 9x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738304 [1] NCCL INFO cudaDriverVersion 12020[32m [repeated 3x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738304 [1] NCCL INFO Bootstrap : Using ens25f0:192.168.250.101<0>[32m [repeated 3x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738304 [1] NCCL INFO NET/Plugin : Plugin load (libnccl-net.so) returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory[32m [repeated 3x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m hepgpu1:738304:738304 [1] NCCL INFO NET/Plugin : No plugin found, using internal implementation[32m [repeated 3x across cluster][0m
+[36m(RayWorkerVllm pid=738303)[0m hepgpu1:738303:738987 [0] NCCL INFO Setting affinity for GPU 0 to 01,00000000,00000001[32m [repeated 2x across cluster][0m
+[36m(RayWorkerVllm pid=738303)[0m hepgpu1:738303:739052 [0] NCCL INFO Channel 00/02 :    0   1
+[36m(RayWorkerVllm pid=738303)[0m hepgpu1:738303:739052 [0] NCCL INFO Channel 01/02 :    0   1
+[36m(RayWorkerVllm pid=738304)[0m sb
+[36m(RayWorkerVllm pid=738304)[0m 0
+[36m(RayWorkerVllm pid=738304)[0m 3
+[36m(RayWorkerVllm pid=738304)[0m NCCL version 2.18.1+cuda12.1
+INFO 12-23 09:22:26 llm_engine.py:225] # GPU blocks: 20387, # CPU blocks: 4854
+[36m(RayWorkerVllm pid=738304)[0m INFO 12-23 09:22:30 model_runner.py:405] Capturing the model for CUDA graphs. This may lead to unexpected consequences if the model is not static. To run the model in eager mode, set 'enforce_eager=True' or use '--enforce-eager' in the CLI.
+[36m(RayWorkerVllm pid=738304)[0m INFO 12-23 09:22:30 model_runner.py:409] CUDA graphs can take additional 1~3 GiB memory per GPU. If you are running out of memory, consider decreasing `gpu_memory_utilization` or enforcing eager mode.
+[36m(RayWorkerVllm pid=153179, ip=192.168.251.105)[0m hepgpu3:153179:153384 [1] NCCL INFO Using network IB[32m [repeated 13x across cluster][0m
+[36m(RayWorkerVllm pid=153179, ip=192.168.251.105)[0m hepgpu3:153179:153384 [1] NCCL INFO Trees [0] -1/-1/-1->1->0 [1] -1/-1/-1->1->0[32m [repeated 14x across cluster][0m
+[36m(RayWorkerVllm pid=153179, ip=192.168.251.105)[0m hepgpu3:153179:153384 [1] NCCL INFO P2P Chunksize set to 131072[32m [repeated 14x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m hepgpu2:282220:282439 [1] NCCL INFO Channel 01/1 : 0[b1000] -> 1[b1000] [send] via NET/IB/0/Shared[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=153179, ip=192.168.251.105)[0m hepgpu3:153179:153384 [1] NCCL INFO Connected all rings[32m [repeated 14x across cluster][0m
+[36m(RayWorkerVllm pid=153179, ip=192.168.251.105)[0m hepgpu3:153179:153381 [1] NCCL INFO Channel 01/1 : 0[b1000] -> 1[b1000] [receive] via NET/IB/0/Shared[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=153179, ip=192.168.251.105)[0m hepgpu3:153179:153384 [1] NCCL INFO Channel 01 : 1[b1000] -> 0[4b000] via SHM/direct/direct[32m [repeated 12x across cluster][0m
+[36m(RayWorkerVllm pid=153179, ip=192.168.251.105)[0m hepgpu3:153179:153384 [1] NCCL INFO Connected all trees[32m [repeated 14x across cluster][0m
+[36m(RayWorkerVllm pid=153179, ip=192.168.251.105)[0m hepgpu3:153179:153384 [1] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512[32m [repeated 14x across cluster][0m
+[36m(RayWorkerVllm pid=153179, ip=192.168.251.105)[0m hepgpu3:153179:153384 [1] NCCL INFO 2 coll channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer[32m [repeated 14x across cluster][0m
+[36m(RayWorkerVllm pid=153179, ip=192.168.251.105)[0m hepgpu3:153179:153384 [1] NCCL INFO comm 0x18a89140 rank 1 nranks 2 cudaDev 1 busId b1000 commId 0xf59060fb42451f92 - Init COMPLETE[32m [repeated 14x across cluster][0m
+[36m(RayWorkerVllm pid=153178, ip=192.168.251.105)[0m hepgpu3:153178:153383 [0] NCCL INFO Setting affinity for GPU 0 to 01,00000000,00000001[32m [repeated 7x across cluster][0m
+[36m(RayWorkerVllm pid=153178, ip=192.168.251.105)[0m hepgpu3:153178:153383 [0] NCCL INFO Channel 01/02 :    0   1[32m [repeated 12x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m sb[32m [repeated 3x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m 4[32m [repeated 6x across cluster][0m
+[36m(RayWorkerVllm pid=153178, ip=192.168.251.105)[0m NCCL version 2.18.1+cuda12.1[32m [repeated 3x across cluster][0m
+[36m(RayWorkerVllm pid=153179, ip=192.168.251.105)[0m INFO 12-23 09:22:30 model_runner.py:405] Capturing the model for CUDA graphs. This may lead to unexpected consequences if the model is not static. To run the model in eager mode, set 'enforce_eager=True' or use '--enforce-eager' in the CLI.[32m [repeated 5x across cluster][0m
+[36m(RayWorkerVllm pid=153179, ip=192.168.251.105)[0m INFO 12-23 09:22:30 model_runner.py:409] CUDA graphs can take additional 1~3 GiB memory per GPU. If you are running out of memory, consider decreasing `gpu_memory_utilization` or enforcing eager mode.[32m [repeated 5x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 41x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 82x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 41x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 82x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 41x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 82x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 42x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 84x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 41x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 82x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 41x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 82x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m INFO 12-23 09:23:05 model_runner.py:451] Graph capturing finished in 34 secs.
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 34x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 68x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m INFO 12-23 09:23:05 model_runner.py:451] Graph capturing finished in 35 secs.[32m [repeated 5x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 52x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 105x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 52x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 104x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 112x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 96x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 112x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 44x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 88x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m sb[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m 4[32m [repeated 80x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 60x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 120x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 60x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 120x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 96x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 96x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 96x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 54x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 108x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 35x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 70x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 27x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 54x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 64x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 64x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 26x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 52x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 26x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 52x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 16x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 16x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 12x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 20x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 20x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 8x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 16x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 64x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 20x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 16x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m 4[32m [repeated 54x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 50x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 16x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 20x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 12x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 12x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 20x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 20x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m 4[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 12x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 16x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 20x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 20x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 36x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 72x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 54x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 108x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 50x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 100x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 44x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 88x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 44x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 88x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 112x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 36x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 72x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 80x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 36x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 72x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 37x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 74x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 27x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 54x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 64x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 80x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 64x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 64x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 16x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 36x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 72x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m sb[32m [repeated 20x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m 4[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=738303)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=738303)[0m 2[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 36x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 72x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 64x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 20x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 80x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 36x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 72x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 20x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 64x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 34x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 68x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 18x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 36x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 64x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 8x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 16x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m sb[32m [repeated 20x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m 4[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 36x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 72x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 64x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 20x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 40x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 12x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 64x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 44x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 88x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 58x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 116x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 42x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 84x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 64x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 36x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 72x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 32x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 64x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 96x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 28x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 56x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m sb[32m [repeated 23x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m 4[32m [repeated 46x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 29x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 58x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m sb[32m [repeated 36x across cluster][0m
+[36m(RayWorkerVllm pid=738304)[0m 3[32m [repeated 72x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m sb[32m [repeated 24x across cluster][0m
+[36m(RayWorkerVllm pid=282220, ip=192.168.251.104)[0m 5[32m [repeated 48x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m sb[32m [repeated 15x across cluster][0m
+[36m(RayWorkerVllm pid=282219, ip=192.168.251.104)[0m 4[32m [repeated 30x across cluster][0m

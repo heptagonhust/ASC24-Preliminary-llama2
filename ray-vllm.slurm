@@ -8,12 +8,13 @@
 #SBATCH --output=outputs/vllm_%j.out
 #SBATCH --error=outputs/vllm_%j.err
 #SBATCH --export=ALL
+#SBATCH --exclusive
 
 # export headnode=`hostname -s`
 export headnode='hepgpu1'
 export headaddr='192.168.251.101'
 export port=6379
-export NCCL_DEBUG=INFO 
+export NCCL_DEBUG=INFO
 
 srun -J start_ray ./start_ray_server.sh
 jobID=$(squeue --name start_ray | tail -1 | awk '{print $1}')

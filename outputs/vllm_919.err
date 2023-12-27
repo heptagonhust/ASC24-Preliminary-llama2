@@ -1,0 +1,69 @@
+Traceback (most recent call last):
+  File "/data/asc24llama/miniconda3/envs/llama_test/bin/ray", line 8, in <module>
+    sys.exit(main())
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/scripts/scripts.py", line 2498, in main
+    return cli()
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/click/core.py", line 1157, in __call__
+    return self.main(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/click/core.py", line 1078, in main
+    rv = self.invoke(ctx)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/click/core.py", line 1688, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/click/core.py", line 1434, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/click/core.py", line 783, in invoke
+    return __callback(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/autoscaler/_private/cli_logger.py", line 856, in wrapper
+    return f(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/scripts/scripts.py", line 771, in start
+    node = ray._private.node.Node(
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/_private/node.py", line 307, in __init__
+    self.start_head_processes()
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/_private/node.py", line 1310, in start_head_processes
+    self._write_cluster_info_to_kv()
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/_private/node.py", line 1265, in _write_cluster_info_to_kv
+    assert curr_val == self._session_name.encode("utf-8"), (
+AssertionError: Session name session_2023-12-23_09-37-06_257687_745803 does not match persisted value b'session_2023-12-23_09-20-57_755631_733546'. Perhaps there was an error connecting to Redis.
+srun: error: hepgpu1: task 0: Exited with exit code 1
+[2023-12-23 09:37:12,573 W 284786 284786] global_state_accessor.cc:407: Some processes that the driver needs to connect to have not registered with GCS, so retrying. Have you run 'ray start' on this node?
+2023-12-23 09:37:16,463	INFO worker.py:1489 -- Connecting to existing Ray cluster at address: 192.168.251.101:6379...
+[2023-12-23 09:37:16,468 W 745939 745939] global_state_accessor.cc:407: Some processes that the driver needs to connect to have not registered with GCS, so retrying. Have you run 'ray start' on this node?
+[2023-12-23 09:37:17,469 W 745939 745939] global_state_accessor.cc:407: Some processes that the driver needs to connect to have not registered with GCS, so retrying. Have you run 'ray start' on this node?
+[2023-12-23 09:37:18,471 W 745939 745939] global_state_accessor.cc:407: Some processes that the driver needs to connect to have not registered with GCS, so retrying. Have you run 'ray start' on this node?
+[2023-12-23 09:37:19,472 W 745939 745939] global_state_accessor.cc:407: Some processes that the driver needs to connect to have not registered with GCS, so retrying. Have you run 'ray start' on this node?
+[2023-12-23 09:37:20,473 W 745939 745939] global_state_accessor.cc:407: Some processes that the driver needs to connect to have not registered with GCS, so retrying. Have you run 'ray start' on this node?
+[2023-12-23 09:37:21,474 W 745939 745939] global_state_accessor.cc:407: Some processes that the driver needs to connect to have not registered with GCS, so retrying. Have you run 'ray start' on this node?
+[2023-12-23 09:37:22,475 W 745939 745939] global_state_accessor.cc:407: Some processes that the driver needs to connect to have not registered with GCS, so retrying. Have you run 'ray start' on this node?
+[2023-12-23 09:37:23,476 W 745939 745939] global_state_accessor.cc:407: Some processes that the driver needs to connect to have not registered with GCS, so retrying. Have you run 'ray start' on this node?
+[2023-12-23 09:37:24,477 W 745939 745939] global_state_accessor.cc:407: Some processes that the driver needs to connect to have not registered with GCS, so retrying. Have you run 'ray start' on this node?
+[2023-12-23 09:37:25,478 W 745939 745939] global_state_accessor.cc:407: Some processes that the driver needs to connect to have not registered with GCS, so retrying. Have you run 'ray start' on this node?
+2023-12-23 09:37:26,480	INFO worker.py:1638 -- Failed to connect to the default Ray cluster address at 192.168.251.101:6379. This is most likely due to a previous Ray instance that has since crashed. To reset the default address to connect to, run `ray stop` or restart Ray with `ray start`.
+Traceback (most recent call last):
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/_private/worker.py", line 1629, in init
+    _global_node = ray._private.node.Node(
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/_private/node.py", line 254, in __init__
+    node_info = ray._private.services.get_node_to_connect_for_driver(
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/_private/services.py", line 475, in get_node_to_connect_for_driver
+    return global_state.get_node_to_connect_for_driver(node_ip_address)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/_private/state.py", line 751, in get_node_to_connect_for_driver
+    return self.global_state_accessor.get_node_to_connect_for_driver(
+  File "python/ray/includes/global_state_accessor.pxi", line 218, in ray._raylet.GlobalStateAccessor.get_node_to_connect_for_driver
+RuntimeError: b"This node has an IP address of 192.168.251.101, and Ray expects this IP address to be either the GCS address or one of the Raylet addresses. Connected to GCS at 192.168.251.101 and found raylets at 192.168.251.105, 192.168.251.104 but none of these match this node's IP 192.168.251.101. Are any of these actually a different IP address for the same node?You might need to provide --node-ip-address to specify the IP address that the head should use when sending to this node."
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm-llama-test.py", line 4, in <module>
+    llm = LLM(model = "/data/70B-chat-hf", tensor_parallel_size=2, pipeline_parallel_size=3)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/entrypoints/llm.py", line 105, in __init__
+    self.llm_engine = LLMEngine.from_engine_args(engine_args)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/llm_engine.py", line 263, in from_engine_args
+    distributed_init_method, placement_group = initialize_cluster(
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/ray_utils.py", line 75, in initialize_cluster
+    ray.init(address=ray_address, ignore_reinit_error=True)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/_private/client_mode_hook.py", line 103, in wrapper
+    return func(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/_private/worker.py", line 1645, in init
+    raise ConnectionError
+ConnectionError
+srun: error: hepgpu1: task 0: Exited with exit code 1

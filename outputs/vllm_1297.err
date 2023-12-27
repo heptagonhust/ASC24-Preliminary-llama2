@@ -1,0 +1,14 @@
+[2023-12-26 07:30:19,690 I 234264 234264] global_state_accessor.cc:374: This node has an IP address of 192.168.251.105, but we cannot find a local Raylet with the same address. This can happen when you connect to the Ray cluster with a different IP address or when connecting to a container.
+Traceback (most recent call last):
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm-llama-test.py", line 1, in <module>
+    from vllm import LLM, SamplingParams
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/__init__.py", line 3, in <module>
+    from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/arg_utils.py", line 6, in <module>
+    from vllm.config import (CacheConfig, ModelConfig, ParallelConfig,
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/config.py", line 9, in <module>
+    from vllm.utils import get_cpu_memory, is_hip
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/utils.py", line 9, in <module>
+    from vllm._C import cuda_utils
+ImportError: /data/asc24llama/zbtrs/ASC24-llama2/vllm/_C.cpython-39-x86_64-linux-gnu.so: undefined symbol: _ZN3c106detail23torchInternalAssertFailEPKcS2_jS2_RKSs
+srun: error: hepgpu1: task 0: Exited with exit code 1

@@ -1,0 +1,15 @@
+[2023-12-23 14:48:15,492 I 194568 194568] global_state_accessor.cc:374: This node has an IP address of 192.168.251.105, but we cannot find a local Raylet with the same address. This can happen when you connect to the Ray cluster with a different IP address or when connecting to a container.
+[2023-12-23 14:48:15,490 I 324148 324148] global_state_accessor.cc:374: This node has an IP address of 192.168.251.104, but we cannot find a local Raylet with the same address. This can happen when you connect to the Ray cluster with a different IP address or when connecting to a container.
+2023-12-23 14:48:19,048	INFO worker.py:1489 -- Connecting to existing Ray cluster at address: 192.168.251.101:6379...
+2023-12-23 14:48:19,054	INFO worker.py:1673 -- Connected to Ray cluster.
+Traceback (most recent call last):
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm-llama-test.py", line 4, in <module>
+    llm = LLM(model = "/data/70B-chat-hf", tensor_parallel_size=2, pipeline_parallel_size=6)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/entrypoints/llm.py", line 105, in __init__
+    self.llm_engine = LLMEngine.from_engine_args(engine_args)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/llm_engine.py", line 262, in from_engine_args
+    distributed_init_method, placement_group = initialize_cluster(
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/ray_utils.py", line 106, in initialize_cluster
+    raise ValueError(
+ValueError: The number of required GPUs exceeds the total number of available GPUs in the cluster.
+srun: error: hepgpu1: task 0: Exited with exit code 1

@@ -1,0 +1,59 @@
+[2023-12-26 10:40:18,272 I 390171 390171] global_state_accessor.cc:374: This node has an IP address of 192.168.251.104, but we cannot find a local Raylet with the same address. This can happen when you connect to the Ray cluster with a different IP address or when connecting to a container.
+[2023-12-26 10:40:18,255 I 6176 6176] global_state_accessor.cc:374: This node has an IP address of 192.168.251.106, but we cannot find a local Raylet with the same address. This can happen when you connect to the Ray cluster with a different IP address or when connecting to a container.
+2023-12-26 10:40:21,779	INFO worker.py:1489 -- Connecting to existing Ray cluster at address: 192.168.251.101:6379...
+2023-12-26 10:40:21,785	INFO worker.py:1673 -- Connected to Ray cluster.
+[36m(RayWorkerVllm pid=6320, ip=192.168.251.106)[0m [W ProcessGroupNCCL.cpp:1856] Warning: 0NCCL_AVOID_RECORD_STREAMS=1 has no effect for point-to-point collectives. (function operator())
+Traceback (most recent call last):
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm-llama-test.py", line 4, in <module>
+    llm = LLM(model = "/data/70B-chat-hf", tensor_parallel_size=2, pipeline_parallel_size=3)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/entrypoints/llm.py", line 105, in __init__
+    self.llm_engine = LLMEngine.from_engine_args(engine_args)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/llm_engine.py", line 265, in from_engine_args
+    engine = cls(*engine_configs,
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/llm_engine.py", line 114, in __init__
+    self._init_cache()
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/llm_engine.py", line 210, in _init_cache
+    num_blocks = self._run_workers(
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/llm_engine.py", line 772, in _run_workers
+    self._run_workers_in_batch(workers, method, *args, **kwargs))
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/llm_engine.py", line 749, in _run_workers_in_batch
+    all_outputs = ray.get(all_outputs)
+  File "/data/asc24llama/miniconda3/envs/llama_new/lib/python3.9/site-packages/ray/_private/auto_init_hook.py", line 24, in auto_init_wrapper
+    return fn(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_new/lib/python3.9/site-packages/ray/_private/client_mode_hook.py", line 103, in wrapper
+    return func(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_new/lib/python3.9/site-packages/ray/_private/worker.py", line 2563, in get
+    raise value.as_instanceof_cause()
+ray.exceptions.RayTaskError(DistBackendError): [36mray::RayWorkerVllm.execute_method()[39m (pid=74512, ip=192.168.251.101, actor_id=6bc7581c4cfb207b37f8e6d901000000, repr=<vllm.engine.ray_utils.RayWorkerVllm object at 0x7f885d80d100>)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/ray_utils.py", line 31, in execute_method
+    return executor(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_new/lib/python3.9/site-packages/torch/utils/_contextlib.py", line 115, in decorate_context
+    return func(*args, **kwargs)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/worker/worker.py", line 95, in profile_num_available_blocks
+    self.model_runner.profile_run()
+  File "/data/asc24llama/miniconda3/envs/llama_new/lib/python3.9/site-packages/torch/utils/_contextlib.py", line 115, in decorate_context
+    return func(*args, **kwargs)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/worker/model_runner.py", line 398, in profile_run
+    self.execute_model(seqs, kv_caches)
+  File "/data/asc24llama/miniconda3/envs/llama_new/lib/python3.9/site-packages/torch/utils/_contextlib.py", line 115, in decorate_context
+    return func(*args, **kwargs)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/worker/model_runner.py", line 354, in execute_model
+    hidden_states = model_executable(
+  File "/data/asc24llama/miniconda3/envs/llama_new/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_new/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/model_executor/models/llama.py", line 316, in forward
+    send_to_next_pp_rank(hidden_states)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/model_executor/parallel_utils/pipeline_parallel/communication.py", line 14, in send_to_next_pp_rank
+    dist.send(tensor, get_pipeline_model_parallel_next_rank())
+  File "/data/asc24llama/miniconda3/envs/llama_new/lib/python3.9/site-packages/torch/distributed/c10d_logger.py", line 47, in wrapper
+    return func(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_new/lib/python3.9/site-packages/torch/distributed/distributed_c10d.py", line 1597, in send
+    default_pg.send([tensor], dst, tag).wait()
+torch.distributed.DistBackendError: NCCL error in: ../torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:1333, unhandled cuda error (run with NCCL_DEBUG=INFO for details), NCCL version 2.18.1
+ncclUnhandledCudaError: Call to CUDA function failed.
+Last error:
+Cuda failure 'invalid argument'
+[36m(RayWorkerVllm pid=74513)[0m [W ProcessGroupNCCL.cpp:1856] Warning: 0NCCL_AVOID_RECORD_STREAMS=1 has no effect for point-to-point collectives. (function operator())[32m [repeated 5x across cluster][0m
+srun: error: hepgpu1: task 0: Exited with exit code 1

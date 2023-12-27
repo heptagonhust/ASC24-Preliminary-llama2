@@ -1,0 +1,85 @@
+Traceback (most recent call last):
+  File "/data/asc24llama/miniconda3/envs/llama_test/bin/ray", line 8, in <module>
+    sys.exit(main())
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/scripts/scripts.py", line 2498, in main
+    return cli()
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/click/core.py", line 1157, in __call__
+    return self.main(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/click/core.py", line 1078, in main
+    rv = self.invoke(ctx)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/click/core.py", line 1688, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/click/core.py", line 1434, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/click/core.py", line 783, in invoke
+    return __callback(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/autoscaler/_private/cli_logger.py", line 856, in wrapper
+    return f(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/scripts/scripts.py", line 764, in start
+    raise ConnectionError(
+ConnectionError: Ray is trying to start at 192.168.251.101:6379, but is already running at 192.168.251.101:6379. Please specify a different port using the `--port` flag of `ray start` command.
+srun: error: hepgpu1: task 0: Exited with exit code 1
+2023-12-23 09:36:14,499	INFO worker.py:1489 -- Connecting to existing Ray cluster at address: 192.168.251.101:6379...
+2023-12-23 09:36:14,507	INFO worker.py:1673 -- Connected to Ray cluster.
+[36m(RayWorkerVllm pid=284399, ip=192.168.251.104)[0m [W ProcessGroupNCCL.cpp:1856] Warning: 0NCCL_AVOID_RECORD_STREAMS=1 has no effect for point-to-point collectives. (function operator())
+Traceback (most recent call last):
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm-llama-test.py", line 4, in <module>
+    llm = LLM(model = "/data/70B-chat-hf", tensor_parallel_size=2, pipeline_parallel_size=3)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/entrypoints/llm.py", line 105, in __init__
+    self.llm_engine = LLMEngine.from_engine_args(engine_args)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/llm_engine.py", line 266, in from_engine_args
+    engine = cls(*engine_configs,
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/llm_engine.py", line 115, in __init__
+    self._init_cache()
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/llm_engine.py", line 211, in _init_cache
+    num_blocks = self._run_workers(
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/llm_engine.py", line 773, in _run_workers
+    self._run_workers_in_batch(workers, method, *args, **kwargs))
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/llm_engine.py", line 750, in _run_workers_in_batch
+    all_outputs = ray.get(all_outputs)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/_private/auto_init_hook.py", line 24, in auto_init_wrapper
+    return fn(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/_private/client_mode_hook.py", line 103, in wrapper
+    return func(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/ray/_private/worker.py", line 2563, in get
+    raise value.as_instanceof_cause()
+ray.exceptions.RayTaskError(DistBackendError): [36mray::RayWorkerVllm.execute_method()[39m (pid=745369, ip=192.168.251.101, actor_id=07a921d0cd4f59c35d88913602000000, repr=<vllm.engine.ray_utils.RayWorkerVllm object at 0x7f217b501460>)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/ray_utils.py", line 31, in execute_method
+    return executor(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/torch/utils/_contextlib.py", line 115, in decorate_context
+    return func(*args, **kwargs)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/worker/worker.py", line 95, in profile_num_available_blocks
+    self.model_runner.profile_run()
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/torch/utils/_contextlib.py", line 115, in decorate_context
+    return func(*args, **kwargs)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/worker/model_runner.py", line 398, in profile_run
+    self.execute_model(seqs, kv_caches)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/torch/utils/_contextlib.py", line 115, in decorate_context
+    return func(*args, **kwargs)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/worker/model_runner.py", line 354, in execute_model
+    hidden_states = model_executable(
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/model_executor/models/llama.py", line 329, in forward
+    send_to_next_pp_rank(hidden_states)
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/model_executor/parallel_utils/pipeline_parallel/communication.py", line 19, in send_to_next_pp_rank
+    dist.send(tensor, get_pipeline_model_parallel_next_rank())
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/torch/distributed/c10d_logger.py", line 47, in wrapper
+    return func(*args, **kwargs)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/torch/distributed/distributed_c10d.py", line 1597, in send
+    default_pg.send([tensor], dst, tag).wait()
+torch.distributed.DistBackendError: NCCL error in: ../torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:1333, unhandled cuda error (run with NCCL_DEBUG=INFO for details), NCCL version 2.18.1
+ncclUnhandledCudaError: Call to CUDA function failed.
+Last error:
+Cuda failure 'invalid argument'
+[36m(RayWorkerVllm pid=745369)[0m [W ProcessGroupNCCL.cpp:1856] Warning: 0NCCL_AVOID_RECORD_STREAMS=1 has no effect for point-to-point collectives. (function operator())[32m [repeated 9x across cluster][0m
+srun: error: hepgpu1: task 0: Exited with exit code 1
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+srun: got SIGCONT
+slurmstepd-hepgpu1: error: *** STEP 918.2 ON hepgpu1 CANCELLED AT 2023-12-23T09:36:48 ***
+slurmstepd-hepgpu1: error: *** JOB 918 ON hepgpu1 CANCELLED AT 2023-12-23T09:36:48 ***
+srun: forcing job termination
+srun: error: hepgpu2: task 1: Terminated
+srun: error: hepgpu1: task 0: Terminated

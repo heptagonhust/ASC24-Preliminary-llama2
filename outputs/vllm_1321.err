@@ -1,0 +1,17 @@
+[2023-12-26 13:14:30,944 I 392404 392404] global_state_accessor.cc:374: This node has an IP address of 192.168.251.104, but we cannot find a local Raylet with the same address. This can happen when you connect to the Ray cluster with a different IP address or when connecting to a container.
+[2023-12-26 13:14:30,908 I 9220 9220] global_state_accessor.cc:374: This node has an IP address of 192.168.251.106, but we cannot find a local Raylet with the same address. This can happen when you connect to the Ray cluster with a different IP address or when connecting to a container.
+/data/asc24llama/miniconda3/envs/llama_new/lib/python3.9/site-packages/transformers/utils/generic.py:441: UserWarning: torch.utils._pytree._register_pytree_node is deprecated. Please use torch.utils._pytree.register_pytree_node instead.
+  _torch_pytree._register_pytree_node(
+Traceback (most recent call last):
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm-llama-test.py", line 1, in <module>
+    from vllm import LLM, SamplingParams
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/__init__.py", line 3, in <module>
+    from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/arg_utils.py", line 6, in <module>
+    from vllm.config import (CacheConfig, ModelConfig, ParallelConfig,
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/config.py", line 9, in <module>
+    from vllm.utils import get_cpu_memory, is_hip
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/utils.py", line 9, in <module>
+    from vllm._C import cuda_utils
+ImportError: /data/asc24llama/zbtrs/ASC24-llama2/vllm/_C.cpython-39-x86_64-linux-gnu.so: undefined symbol: _ZN2at4_ops15to_dtype_layout4callERKNS_6TensorEN3c108optionalINS5_10ScalarTypeEEENS6_INS5_6LayoutEEENS6_INS5_6DeviceEEENS6_IbEEbbNS6_INS5_12MemoryFormatEEE
+srun: error: hepgpu1: task 0: Exited with exit code 1

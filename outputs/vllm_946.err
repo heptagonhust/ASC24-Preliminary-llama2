@@ -1,0 +1,21 @@
+[2023-12-23 12:15:02,546 I 190642 190642] global_state_accessor.cc:374: This node has an IP address of 192.168.251.105, but we cannot find a local Raylet with the same address. This can happen when you connect to the Ray cluster with a different IP address or when connecting to a container.
+[2023-12-23 12:15:02,624 I 319981 319981] global_state_accessor.cc:374: This node has an IP address of 192.168.251.104, but we cannot find a local Raylet with the same address. This can happen when you connect to the Ray cluster with a different IP address or when connecting to a container.
+Traceback (most recent call last):
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm-llama-test.py", line 1, in <module>
+    from vllm import LLM, SamplingParams
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/__init__.py", line 3, in <module>
+    from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/engine/arg_utils.py", line 6, in <module>
+    from vllm.config import (CacheConfig, ModelConfig, ParallelConfig,
+  File "/data/asc24llama/zbtrs/ASC24-llama2/vllm/config.py", line 4, in <module>
+    import torch
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/torch/__init__.py", line 237, in <module>
+    _load_global_deps()
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/torch/__init__.py", line 196, in _load_global_deps
+    raise err
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/site-packages/torch/__init__.py", line 177, in _load_global_deps
+    ctypes.CDLL(lib_path, mode=ctypes.RTLD_GLOBAL)
+  File "/data/asc24llama/miniconda3/envs/llama_test/lib/python3.9/ctypes/__init__.py", line 382, in __init__
+    self._handle = _dlopen(self._name, mode)
+OSError: libmkl_intel_lp64.so.2: cannot open shared object file: No such file or directory
+srun: error: hepgpu1: task 0: Exited with exit code 1
