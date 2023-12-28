@@ -7,7 +7,8 @@ from model.llama import LlamaForCausalLM
 import random
 from typing import List, Tuple
 from utils.sampling_metadata import SamplingMetadata
-
+import json
+from tqdm import tqdm
 @contextlib.contextmanager
 def _set_default_torch_dtype(dtype: torch.dtype):
     """Sets the default torch dtype to the given dtype."""
@@ -48,3 +49,16 @@ class LLamaEngine():
             if (new_token == self.tokenizer.eos_token_id):
                 break
         print(self.tokenizer.decode(input_id, skip_special_tokens=True))
+
+
+if __name__ == "__main__":
+    model_config_llama = ModelConfig("/data/7B-chat-hf", "/data/7B-chat-hf", True, 1)
+    sample_config_llama = SamplingMetadata()
+    LLama = LLamaEngine(model_config_llama, sample_config_llama)
+    with open('scrambled_sampled_dataset.json') as f:
+        requests = json.load(f)
+    for i in tqdm(range(len(requests))):
+        prompt, prompt_len, output_len = requests[i]
+        LLama.generate([prompt, prompt_len, output_len])
+        
+        
