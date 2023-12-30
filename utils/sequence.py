@@ -3,8 +3,8 @@ import copy
 import enum
 from typing import Dict, List, Optional, Union
 
-from block import LogicalTokenBlock
-from sampling_params import SamplingParams
+from .block import LogicalTokenBlock
+from .sampling_params import SamplingParams
 
 PromptLogprobs = List[Optional[Dict[int, float]]]
 SampleLogprobs = List[Dict[int, float]]
