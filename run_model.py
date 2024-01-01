@@ -47,6 +47,7 @@ class LLamaEngine():
         token_ids = None
         request_id = 0
         seq = Sequence(request_id, request, input_id, block_size=0)   
+        seq.status = SequenceStatus.RUNNING
         seq_group = SequenceGroup(request_id, [seq], sampling_params, arrival_time = 0)
         scheduler_outputs = SchedulerOutputs(
                     scheduled_seq_groups=[seq_group],
@@ -59,10 +60,14 @@ class LLamaEngine():
         )
         seq_group_metadata_list: List[SequenceGroupMetadata] = []
         for seq_group in scheduler_outputs.scheduled_seq_groups:
+            print('debug: seq_group')
+            print(seq_group)
             seq_data: Dict[int, SequenceData] = {}
             block_tables: Dict[int, List[int]] = {}
             for seq in seq_group.get_seqs(status=SequenceStatus.RUNNING):
                 seq_id = seq.seq_id
+                print('debug: seq_id')
+                print(seq_id)
                 seq_data[seq_id] = seq.data
                 block_tables[seq_id] = self.block_manager.get_block_table(seq)
 
@@ -74,6 +79,9 @@ class LLamaEngine():
                 block_tables=block_tables,
             )
             seq_group_metadata_list.append(seq_group_metadata)
+        print('debug: seq_group_metadata')
+        print(len(seq_group_metadata_list))
+        
         sampling_metadata = _prepare_sample(seq_group_metadata_list, [prompt_len])
         self.sample_config = sampling_metadata
         for i in range(output_len):
