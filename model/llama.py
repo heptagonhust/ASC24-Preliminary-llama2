@@ -74,9 +74,9 @@ class LlamaMLP(nn.Module):
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
-        gate_up, _ = self.gate_up_proj(x)
+        gate_up = self.gate_up_proj(x)
         x = self.act_fn(gate_up)
-        x, _ = self.down_proj(x)
+        x = self.down_proj(x)
         return x
 
 
@@ -167,15 +167,17 @@ class LlamaAttention(nn.Module):
             torch.Tensor: _description_
         """
         #! qkv: [batch_size, seq_len, tp_q_size + 2 * tp_kv_size]
-        qkv, _ = self.qkv_proj(hidden_states)
+        qkv = self.qkv_proj(hidden_states)
         #! q: [batch_size, seq_len, tp_q_size]
         #! k,v: [batch_size, seq_len, tp_kv_size]
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         #! rotary embedding encoding for key & value
         q, k = self.rotary_emb(positions, q, k)
-        k_cache, v_cache = kv_cache
+        # k_cache, v_cache = kv_cache
+        k_cache = None
+        v_cache = None
         attn_output = self.attn(q, k, v, k_cache, v_cache, input_metadata)
-        output, _ = self.o_proj(attn_output)
+        output = self.o_proj(attn_output)
         return output
 
 
@@ -276,7 +278,7 @@ class LlamaModel(nn.Module):
             hidden_states, residual = layer(
                 positions,
                 hidden_states,
-                kv_caches[i],
+                None,
                 input_metadata,
                 residual,
             )

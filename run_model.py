@@ -95,10 +95,16 @@ class LLamaEngine():
             hidden_state = self.model(input_id, position, None, None)
             sample_output = self.model.sample(hidden_state, self.sample_config)
             new_token = sample_output[-1].samples[-1].output_token
-            input_id = torch.cat([input_id, new_token.unsqueeze(0)], dim=-1)
+            # 假设 input_id 的形状是 [batch_size, seq_len]
+            new_token_tensor = torch.tensor([[new_token]], device=input_id.device)
+            input_id = torch.cat([input_id, new_token_tensor], dim=-1)
+
+
             if (new_token == self.tokenizer.eos_token_id):
                 break
-        print(self.tokenizer.decode(input_id, skip_special_tokens=True))
+        first_sequence_ids = input_id[0].tolist()  # 选择第一个序列并转换为列表
+        text = self.tokenizer.decode(first_sequence_ids, skip_special_tokens=True)
+        print(text)
 
 
 if __name__ == "__main__":
