@@ -23,14 +23,19 @@ def _set_default_torch_dtype(dtype: torch.dtype):
 
 class LLamaEngine():
     def __init__(self, model_config: ModelConfig) -> nn.Module:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         random.seed(model_config.seed)
         with _set_default_torch_dtype(model_config.dtype):
-            with torch.device("cuda"):
-                model = LlamaForCausalLM(model_config.hf_model_config)  # 在GPU中建立模型，同时根据TP将模型进行切分，因此开辟的显存空间是切分后的模型大小
-                # Load the weights from the cached or downloaded files.
+            # 在GPU中建立模型，同时根据TP将模型进行切分，因此开辟的显存空间是切分后的模型大小
+            model = LlamaForCausalLM(model_config.hf_model_config)  
+            print("debug: device")
+            print(device)
+            model.to(device=device)
+            # Load the weights from the cached or downloaded files.
             model.load_weights(model_config.model)
         self.model_config = model_config
         self.model = model
+        self.device = device
 
     def generate(self, requests: List[Tuple[str, int, int]]):
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -42,7 +47,7 @@ class LLamaEngine():
             self.run_seq(prompt, prompt_len, output_len)
 
     def run_seq(self, request, prompt_len, output_len):
-        input_id = self.tokenizer(request, return_tensors="pt", padding=True).input_ids
+        input_id = self.tokenizer(request, return_tensors="pt", padding=True).input_ids.to(self.device)
         sampling_params = SamplingParams()
         token_ids = None
         request_id = 0
