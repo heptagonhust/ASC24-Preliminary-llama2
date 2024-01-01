@@ -28,8 +28,8 @@ class LLamaEngine():
         with _set_default_torch_dtype(model_config.dtype):
             # 在GPU中建立模型，同时根据TP将模型进行切分，因此开辟的显存空间是切分后的模型大小
             model = LlamaForCausalLM(model_config.hf_model_config)  
-            print("debug: device")
-            print(device)
+            # print("debug: device")
+            # print(device)
             model.to(device=device)
             # Load the weights from the cached or downloaded files.
             model.load_weights(model_config.model)
@@ -42,8 +42,10 @@ class LLamaEngine():
                         self.model_config.tokenizer, 
                         trust_remote_code=self.model_config.trust_remote_code)
         self.tokenizer.pad_token = self.tokenizer.eos_token
-        for i in requests:
-            prompt, prompt_len, output_len = i
+            # for i in tqdm(range(len(requests))):
+
+        for i in tqdm(range(len(requests))):
+            prompt, prompt_len, output_len = requests[i] 
             self.run_seq(prompt, prompt_len, output_len)
 
     def run_seq(self, request, prompt_len, output_len):
@@ -65,14 +67,14 @@ class LLamaEngine():
         )
         seq_group_metadata_list: List[SequenceGroupMetadata] = []
         for seq_group in scheduler_outputs.scheduled_seq_groups:
-            print('debug: seq_group')
-            print(seq_group)
+            # print('debug: seq_group')
+            # print(seq_group)
             seq_data: Dict[int, SequenceData] = {}
             block_tables: Dict[int, List[int]] = {}
             for seq in seq_group.get_seqs(status=SequenceStatus.RUNNING):
                 seq_id = seq.seq_id
-                print('debug: seq_id')
-                print(seq_id)
+                # print('debug: seq_id')
+                # print(seq_id)
                 seq_data[seq_id] = seq.data
                 #block_tables[seq_id] = self.block_manager.get_block_table(seq)
 
@@ -84,13 +86,13 @@ class LLamaEngine():
                 block_tables=None,
             )
             seq_group_metadata_list.append(seq_group_metadata)
-        print('debug: seq_group_metadata')
-        print(len(seq_group_metadata_list))
+        # print('debug: seq_group_metadata')
+        # print(len(seq_group_metadata_list))
         
         sampling_metadata = _prepare_sample(seq_group_metadata_list, [prompt_len])
         self.sample_config = sampling_metadata
         for i in range(output_len):
-            print(output_len)
+            # print(output_len)
             position = torch.arange(0, input_id.shape[-1])
             hidden_state = self.model(input_id, position, None, None)
             sample_output = self.model.sample(hidden_state, self.sample_config)
