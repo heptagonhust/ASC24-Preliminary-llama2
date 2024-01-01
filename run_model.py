@@ -69,14 +69,14 @@ class LLamaEngine():
                 print('debug: seq_id')
                 print(seq_id)
                 seq_data[seq_id] = seq.data
-                block_tables[seq_id] = self.block_manager.get_block_table(seq)
+                #block_tables[seq_id] = self.block_manager.get_block_table(seq)
 
             seq_group_metadata = SequenceGroupMetadata(
                 request_id=seq_group.request_id,
                 is_prompt=scheduler_outputs.prompt_run,
                 seq_data=seq_data,
                 sampling_params=seq_group.sampling_params,
-                block_tables=block_tables,
+                block_tables=None,
             )
             seq_group_metadata_list.append(seq_group_metadata)
         print('debug: seq_group_metadata')
