@@ -149,9 +149,10 @@ class SamplingTensors:
         pin_memory = True # not in_wsl()
         prompt_max_len = max(len(tokens) for tokens in prompt_tokens)
         prompt_padded_tokens = [
-            tokens + [vocab_size] * (prompt_max_len - len(tokens))
+            tokens.tolist() + [vocab_size] * (prompt_max_len - len(tokens))
             for tokens in prompt_tokens
         ]
+
         output_max_len = max(len(tokens) for tokens in output_tokens)
         output_padded_tokens = [
             tokens + [vocab_size] * (output_max_len - len(tokens))

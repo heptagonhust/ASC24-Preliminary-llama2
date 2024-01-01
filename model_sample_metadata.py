@@ -27,6 +27,9 @@ def _prepare_sample(
         sampling_params = seq_group_metadata.sampling_params
         seq_groups.append((seq_ids, sampling_params))
 
+        # print('debug:')
+        # print(seq_ids)
+
         if seq_group_metadata.is_prompt:
             assert len(seq_ids) == 1
             prompt_len = prompt_lens[i]
