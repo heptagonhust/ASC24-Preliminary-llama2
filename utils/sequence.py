@@ -3,8 +3,8 @@ import copy
 import enum
 from typing import Dict, List, Optional, Union
 
-from .block import LogicalTokenBlock
-from .sampling_params import SamplingParams
+from utils.block import LogicalTokenBlock
+from utils.sampling_params import SamplingParams
 
 PromptLogprobs = List[Optional[Dict[int, float]]]
 SampleLogprobs = List[Dict[int, float]]
@@ -124,7 +124,7 @@ class Sequence:
 
         self.logical_token_blocks: List[LogicalTokenBlock] = []
         # Initialize the logical token blocks with the prompt token ids.
-        self._append_tokens_to_blocks(prompt_token_ids)
+        # self._append_tokens_to_blocks(prompt_token_ids)
         self.status = SequenceStatus.WAITING
 
         # Used for incremental detokenization
@@ -411,3 +411,30 @@ class SequenceGroupOutput:
 # For each sequence group, we generate a list of SequenceOutput object,
 # each of which contains one possible candidate for the next token.
 SamplerOutput = List[SequenceGroupOutput]
+
+class SchedulerOutputs:
+
+    def __init__(
+        self,
+        scheduled_seq_groups: List[SequenceGroup],
+        prompt_run: bool,
+        num_batched_tokens: int,
+        blocks_to_swap_in: Dict[int, int],
+        blocks_to_swap_out: Dict[int, int],
+        blocks_to_copy: Dict[int, List[int]],
+        ignored_seq_groups: List[SequenceGroup],
+    ) -> None:
+        self.scheduled_seq_groups = scheduled_seq_groups
+        self.prompt_run = prompt_run
+        self.num_batched_tokens = num_batched_tokens
+        self.blocks_to_swap_in = blocks_to_swap_in
+        self.blocks_to_swap_out = blocks_to_swap_out
+        self.blocks_to_copy = blocks_to_copy
+        # Swap in and swap out should never happen at the same time.
+        assert not (blocks_to_swap_in and blocks_to_swap_out)
+        self.ignored_seq_groups = ignored_seq_groups
+
+    def is_empty(self) -> bool:
+        # NOTE: We do not consider the ignored sequence groups.
+        return (not self.scheduled_seq_groups and not self.blocks_to_swap_in
+                and not self.blocks_to_swap_out and not self.blocks_to_copy)

@@ -6,39 +6,12 @@ from utils.sampling_params import SamplingParams
 from utils.sampling_params import SamplingType
 from utils.sequence import SequenceData
 import torch
-
-def schedule(self) -> Tuple[List[SequenceGroupMetadata], SchedulerOutputs]:
-        # Schedule sequence groups.
-        # This function call changes the internal states of the scheduler
-        # such as self.running, self.swapped, and self.waiting.
-        scheduler_outputs = self._schedule()
-
-        # Create input data structures.
-        seq_group_metadata_list: List[SequenceGroupMetadata] = []
-        for seq_group in scheduler_outputs.scheduled_seq_groups:
-            seq_data: Dict[int, SequenceData] = {}
-            block_tables: Dict[int, List[int]] = {}
-            for seq in seq_group:
-                seq_id = seq.seq_id
-                seq_data[seq_id] = seq.data
-                block_tables[seq_id] = self.block_manager.get_block_table(seq)
-
-            seq_group_metadata = SequenceGroupMetadata(
-                request_id=seq_group.request_id,
-                is_prompt=scheduler_outputs.prompt_run,
-                seq_data=seq_data,
-                sampling_params=seq_group.sampling_params,
-                block_tables=block_tables,
-            )
-            seq_group_metadata_list.append(seq_group_metadata)
-        return seq_group_metadata_list, scheduler_outputs
     
 def _async_h2d(data: list, dtype, pin_memory):
     t = torch.tensor(data, dtype=dtype, pin_memory=pin_memory)
     return t.to(device="cuda", non_blocking=True)
 
 def _prepare_sample(
-    self,
     seq_group_metadata_list: List[SequenceGroupMetadata],
     prompt_lens: List[int],
 ) -> SamplingMetadata:
@@ -88,9 +61,9 @@ def _prepare_sample(
 
     selected_token_indices = _async_h2d(selected_token_indices,
                                         dtype=torch.long,
-                                        pin_memory=not self.in_wsl)
+                                        pin_memory=True)
     categorized_sample_indices = {
-        t: _async_h2d(seq_ids, dtype=torch.int, pin_memory=not self.in_wsl)
+        t: _async_h2d(seq_ids, dtype=torch.int, pin_memory=True)
         for t, seq_ids in categorized_sample_indices.items()
     }
 
