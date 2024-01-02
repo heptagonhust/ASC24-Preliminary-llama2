@@ -1,18 +1,18 @@
-import torch
-import torch.nn as nn
-from config import ModelConfig
-import contextlib
-from transformers import AutoTokenizer
+from sampler.sampling_metadata import SamplingParams, _prepare_sample
+from model.model_metadata import ModelConfig
 from model.llama import LlamaForCausalLM
-import random
-from typing import List, Tuple,Dict
-from utils.sampling_metadata import SamplingMetadata
-import json
+from sequence.sequence import Sequence 
+
+from transformers import AutoTokenizer
+from typing import List, Tuple
 from tqdm import tqdm
-from model_sample_metadata import _prepare_sample
-from utils.sequence import SequenceGroupMetadata,SequenceGroup
-from utils.sampling_metadata import SamplingParams
-from utils.sequence import Sequence, SchedulerOutputs,SequenceData,SequenceStatus
+import torch.nn as nn
+import torch
+import contextlib
+import random
+import json
+
+
 @contextlib.contextmanager
 def _set_default_torch_dtype(dtype: torch.dtype):
     """Sets the default torch dtype to the given dtype."""
@@ -71,12 +71,3 @@ class LLamaEngine():
         output_token_ids = seq.get_output_token_ids()
         output = self.tokenizer.decode(output_token_ids, skip_special_tokens=True)
         return output
-
-
-if __name__ == "__main__":
-    model_config_llama = ModelConfig("/data/7B-chat-hf", "/data/7B-chat-hf", True, 1, None)
-    LLama = LLamaEngine(model_config_llama)
-    with open('./scrambled_sampled_dataset.json') as f:
-        requests = json.load(f)
-    sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
-    LLama.generate(requests, sampling_params=sampling_params)
