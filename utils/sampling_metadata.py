@@ -80,13 +80,18 @@ class SamplingTensors:
         do_min_p = False
         for i, seq_group in enumerate(sampling_metadata.seq_groups):
             seq_ids, sampling_params = seq_group
+            #! get value from sampling_params
             temperature = sampling_params.temperature
+            #! p,f default 0, r default 1
             p = sampling_params.presence_penalty
             f = sampling_params.frequency_penalty
             r = sampling_params.repetition_penalty
+            #! default 1.00
             top_p = sampling_params.top_p
+            #! default 0
             min_p = sampling_params.min_p
             # k should not be greater than the vocab size.
+            #! default -1, indicating sampling from full vocab
             top_k = min(sampling_params.top_k, vocab_size)
             top_k = vocab_size if top_k == -1 else top_k
             if temperature < _SAMPLING_EPS:
@@ -103,6 +108,7 @@ class SamplingTensors:
                                      or abs(f) >= _SAMPLING_EPS
                                      or abs(r - 1.0) >= _SAMPLING_EPS):
                 do_penalties = True
+            #! prompt_logprobs: default None
             if (i < sampling_metadata.num_prompts
                     and sampling_params.prompt_logprobs is not None):
                 # For tokens in the prompt that we only need to get their logprobs
@@ -118,8 +124,16 @@ class SamplingTensors:
                 output_tokens.extend([] for _ in range(prompt_len - 1))
             for seq_id in seq_ids:
                 seq_data = sampling_metadata.seq_data[seq_id]
+                #! List[List[int]]
                 prompt_tokens.append(seq_data.prompt_token_ids)
                 output_tokens.append(seq_data.output_token_ids)
+            '''
+                if sampling_params.prompt_logprobs:
+                    set top_k & top_p to a list of specific value whose length 
+                        is prompt_len - 1 + num_of_seqs
+                if not sampling_params.prompt_logprobs:
+                    set top_k & top_p to num_of_seq specific value
+            '''
             temperatures += [temperature] * len(seq_ids)
             top_ps += [top_p] * len(seq_ids)
             top_ks += [top_k] * len(seq_ids)
@@ -148,17 +162,20 @@ class SamplingTensors:
         # pinned memory.
         pin_memory = True # not in_wsl()
         prompt_max_len = max(len(tokens) for tokens in prompt_tokens)
+        #! padding prompt_tokens to the same length with non-exist token(id: size of token space)
         prompt_padded_tokens = [
-            tokens.tolist() + [vocab_size] * (prompt_max_len - len(tokens))
+            tokens + [vocab_size] * (prompt_max_len - len(tokens))
             for tokens in prompt_tokens
         ]
 
+        #! padding output_tokens to the same length with non-exist token(id: size of token space)
         output_max_len = max(len(tokens) for tokens in output_tokens)
         output_padded_tokens = [
             tokens + [vocab_size] * (output_max_len - len(tokens))
             for tokens in output_tokens
         ]
 
+        #! create tensor and send them to gpu
         temperatures_t = torch.tensor(
             temperatures,
             device="cpu",

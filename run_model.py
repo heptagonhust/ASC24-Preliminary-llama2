@@ -36,86 +36,47 @@ class LLamaEngine():
         self.model_config = model_config
         self.model = model
         self.device = device
-
-    def generate(self, requests: List[Tuple[str, int, int]]):
         self.tokenizer = AutoTokenizer.from_pretrained(
                         self.model_config.tokenizer, 
                         trust_remote_code=self.model_config.trust_remote_code)
         self.tokenizer.pad_token = self.tokenizer.eos_token
-            # for i in tqdm(range(len(requests))):
 
+    def generate(self, requests: List[Tuple[str, int, int]], 
+                 sampling_params: SamplingParams = None):
         for i in tqdm(range(len(requests))):
             prompt, prompt_len, output_len = requests[i] 
-            self.run_seq(prompt, prompt_len, output_len)
+            output = self.run_seq(prompt, i, output_len, sampling_params)
+            print(f'input: {prompt}\ninput_len: {prompt_len}\n')
+            print(f'output: {output}\noutput_len: {len(output)}\n\n')
 
-    def run_seq(self, request, prompt_len, output_len):
-        input_id = self.tokenizer(request, return_tensors="pt", padding=True).input_ids.to(self.device)
-        sampling_params = SamplingParams()
-        token_ids = None
-        request_id = 0
+    def run_seq(self, request, request_id, output_len, 
+                sampling_params: SamplingParams = None):
+        input_id = self.tokenizer.encode(request)
         seq = Sequence(request_id, request, input_id, block_size=0)   
-        seq.status = SequenceStatus.RUNNING
-        seq_group = SequenceGroup(request_id, [seq], sampling_params, arrival_time = 0)
-        scheduler_outputs = SchedulerOutputs(
-                    scheduled_seq_groups=[seq_group],
-                    prompt_run=True,
-                    num_batched_tokens=1 ,
-                    blocks_to_swap_in=0,
-                    blocks_to_swap_out=0,
-                    blocks_to_copy=0,
-                    ignored_seq_groups=0,
-        )
-        seq_group_metadata_list: List[SequenceGroupMetadata] = []
-        for seq_group in scheduler_outputs.scheduled_seq_groups:
-            # print('debug: seq_group')
-            # print(seq_group)
-            seq_data: Dict[int, SequenceData] = {}
-            block_tables: Dict[int, List[int]] = {}
-            for seq in seq_group.get_seqs(status=SequenceStatus.RUNNING):
-                seq_id = seq.seq_id
-                # print('debug: seq_id')
-                # print(seq_id)
-                seq_data[seq_id] = seq.data
-                #block_tables[seq_id] = self.block_manager.get_block_table(seq)
 
-            seq_group_metadata = SequenceGroupMetadata(
-                request_id=seq_group.request_id,
-                is_prompt=scheduler_outputs.prompt_run,
-                seq_data=seq_data,
-                sampling_params=seq_group.sampling_params,
-                block_tables=None,
-            )
-            seq_group_metadata_list.append(seq_group_metadata)
-        # print('debug: seq_group_metadata')
-        # print(len(seq_group_metadata_list))
-        
-        sampling_metadata = _prepare_sample(seq_group_metadata_list, [prompt_len])
-        self.sample_config = sampling_metadata
         for i in range(output_len):
-            # print(output_len)
-            position = torch.arange(0, input_id.shape[-1])
-            hidden_state = self.model(input_id, position, None, None)
-            sample_output = self.model.sample(hidden_state, self.sample_config)
-            new_token = sample_output[-1].samples[-1].output_token
-            # 假设 input_id 的形状是 [batch_size, seq_len]
-            new_token_tensor = torch.tensor([[new_token]], device=input_id.device)
-            input_id = torch.cat([input_id, new_token_tensor], dim=-1)
+            sampling_metadata = _prepare_sample(seq, sampling_params)
 
+            position = torch.arange(0, seq.get_len())
+            seq_token_ids = seq.get_token_ids()
+            seq_token_ids = torch.tensor(seq_token_ids, dtype=torch.long, device=self.device)
+            hidden_state = self.model(seq_token_ids, position, None, None)
+            sample_output = self.model.sample(hidden_state, sampling_metadata)
+            new_token_id = sample_output[-1].samples[-1].output_token
+            tokens_logprob = sample_output[-1].samples[-1].logprobs
+            seq.append_token_id(new_token_id, tokens_logprob)
 
-            if (new_token == self.tokenizer.eos_token_id):
+            if (seq.get_last_token_id() == self.tokenizer.eos_token_id):
                 break
-        first_sequence_ids = input_id[0].tolist()  # 选择第一个序列并转换为列表
-        text = self.tokenizer.decode(first_sequence_ids, skip_special_tokens=True)
-        print(text)
+        output_token_ids = seq.get_output_token_ids()
+        output = self.tokenizer.decode(output_token_ids, skip_special_tokens=True)
+        return output
 
 
 if __name__ == "__main__":
     model_config_llama = ModelConfig("/data/7B-chat-hf", "/data/7B-chat-hf", True, 1, None)
     LLama = LLamaEngine(model_config_llama)
-    with open('scrambled_sampled_dataset.json') as f:
+    with open('./scrambled_sampled_dataset.json') as f:
         requests = json.load(f)
-    # for i in tqdm(range(len(requests))):
-    #     prompt, prompt_len, output_len = requests[i] 
-    LLama.generate(requests)
-        
-        
+    sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
+    LLama.generate(requests, sampling_params=sampling_params)

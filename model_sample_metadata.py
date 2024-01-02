@@ -4,7 +4,7 @@ from utils.sequence import SequenceGroupMetadata
 from utils.sampling_metadata import SamplingMetadata
 from utils.sampling_params import SamplingParams
 from utils.sampling_params import SamplingType
-from utils.sequence import SequenceData
+from utils.sequence import SequenceData, Sequence
 import torch
     
 def _async_h2d(data: list, dtype, pin_memory):
@@ -12,72 +12,33 @@ def _async_h2d(data: list, dtype, pin_memory):
     return t.to(device="cuda", non_blocking=True)
 
 def _prepare_sample(
-    seq_group_metadata_list: List[SequenceGroupMetadata],
-    prompt_lens: List[int],
+    seq: Sequence,
+    sampling_params: SamplingParams,
 ) -> SamplingMetadata:
     seq_groups: List[Tuple[List[int], SamplingParams]] = []
     selected_token_indices: List[int] = []
-    selected_token_start_idx = 0
     categorized_sample_indices = {t: [] for t in SamplingType}
-    categorized_sample_indices_start_idx = 0
 
-    max_prompt_len = max(prompt_lens) if prompt_lens else 1
-    for i, seq_group_metadata in enumerate(seq_group_metadata_list):
-        seq_ids = list(seq_group_metadata.seq_data.keys())
-        sampling_params = seq_group_metadata.sampling_params
-        seq_groups.append((seq_ids, sampling_params))
-
-        # print('debug:')
-        # print(seq_ids)
-
-        if seq_group_metadata.is_prompt:
-            assert len(seq_ids) == 1
-            prompt_len = prompt_lens[i]
-            if sampling_params.prompt_logprobs is not None:
-                # NOTE: prompt token positions do not need sample, skip
-                categorized_sample_indices_start_idx += prompt_len - 1
-
-            categorized_sample_indices[
-                sampling_params.sampling_type].append(
-                    categorized_sample_indices_start_idx)
-            categorized_sample_indices_start_idx += 1
-
-            if sampling_params.prompt_logprobs is not None:
-                selected_token_indices.extend(
-                    range(selected_token_start_idx,
-                            selected_token_start_idx + prompt_len - 1))
-            selected_token_indices.append(selected_token_start_idx +
-                                            prompt_len - 1)
-            selected_token_start_idx += max_prompt_len
-        else:
-            num_seqs = len(seq_ids)
-            selected_token_indices.extend(
-                range(selected_token_start_idx,
-                        selected_token_start_idx + num_seqs))
-            selected_token_start_idx += num_seqs
-
-            categorized_sample_indices[
-                sampling_params.sampling_type].extend(
-                    range(categorized_sample_indices_start_idx,
-                            categorized_sample_indices_start_idx + num_seqs))
-            categorized_sample_indices_start_idx += num_seqs
-
+    selected_token_indices.append(seq.get_len() - 1)
     selected_token_indices = _async_h2d(selected_token_indices,
                                         dtype=torch.long,
                                         pin_memory=True)
+    seq_groups.append(([seq.seq_id], sampling_params))
+
+    #! put sequence id of a specified categories to device
+    categorized_sample_indices[sampling_params.sampling_type] = [0]
     categorized_sample_indices = {
         t: _async_h2d(seq_ids, dtype=torch.int, pin_memory=True)
         for t, seq_ids in categorized_sample_indices.items()
     }
 
     seq_data: Dict[int, SequenceData] = {}
-    for seq_group_metadata in seq_group_metadata_list:
-        seq_data.update(seq_group_metadata.seq_data)
+    seq_data[seq.seq_id] = seq.data
 
     sampling_metadata = SamplingMetadata(
         seq_groups=seq_groups,
         seq_data=seq_data,
-        prompt_lens=prompt_lens,
+        prompt_lens=[seq.get_prompt_len()],
         selected_token_indices=selected_token_indices,
         categorized_sample_indices=categorized_sample_indices,
     )
