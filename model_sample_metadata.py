@@ -26,7 +26,7 @@ def _prepare_sample(
     seq_groups.append(([seq.seq_id], sampling_params))
 
     #! put sequence id of a specified categories to device
-    categorized_sample_indices[sampling_params.sampling_type] = [seq.seq_id]
+    categorized_sample_indices[sampling_params.sampling_type] = [0]
     categorized_sample_indices = {
         t: _async_h2d(seq_ids, dtype=torch.int, pin_memory=True)
         for t, seq_ids in categorized_sample_indices.items()

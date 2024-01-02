@@ -58,7 +58,7 @@ class LLamaEngine():
             sampling_metadata = _prepare_sample(seq, sampling_params)
 
             position = torch.arange(0, seq.get_len())
-            seq_token_ids = [seq.get_token_ids()]
+            seq_token_ids = seq.get_token_ids()
             seq_token_ids = torch.tensor(seq_token_ids, dtype=torch.long, device=self.device)
             hidden_state = self.model(seq_token_ids, position, None, None)
             sample_output = self.model.sample(hidden_state, sampling_metadata)
