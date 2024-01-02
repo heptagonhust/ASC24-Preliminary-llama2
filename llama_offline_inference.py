@@ -1,82 +1,115 @@
-from sampler.sampling_metadata import SamplingParams, _prepare_sample
-from model.model_metadata import ModelConfig
-from model.llama import LlamaForCausalLM
-from sequence.sequence import Sequence 
-
-from transformers import AutoTokenizer
-from typing import List, Tuple
-from tqdm import tqdm
-import torch.nn as nn
-import torch
-import contextlib
-import random
+import argparse
 import json
+import random
+import time
+from typing import List, Optional, Tuple
+
+import torch
+from transformers import (AutoModelForCausalLM, AutoTokenizer,
+                          PreTrainedTokenizerBase)
 
 
-@contextlib.contextmanager
-def _set_default_torch_dtype(dtype: torch.dtype):
-    """Sets the default torch dtype to the given dtype."""
-    old_dtype = torch.get_default_dtype()
-    torch.set_default_dtype(dtype)
-    yield
-    torch.set_default_dtype(old_dtype)
+def run_hf(
+    requests: List[Tuple[str, int, int]],
+    model: str,
+    tokenizer: PreTrainedTokenizerBase,
+    trust_remote_code: bool,
+) -> float:
 
-class LLamaEngine():
-    def __init__(self, model_config: ModelConfig) -> nn.Module:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        random.seed(model_config.seed)
-        with _set_default_torch_dtype(model_config.dtype):
-            # 在GPU中建立模型，同时根据TP将模型进行切分，因此开辟的显存空间是切分后的模型大小
-            model = LlamaForCausalLM(model_config.hf_model_config)  
-            # print("debug: device")
-            # print(device)
-            model.to(device=device)
-            # Load the weights from the cached or downloaded files.
-            model.load_weights(model_config.model)
-        self.model_config = model_config
-        self.model = model
-        self.device = device
-        self.tokenizer = AutoTokenizer.from_pretrained(
-                        self.model_config.tokenizer, 
-                        trust_remote_code=self.model_config.trust_remote_code)
-        self.tokenizer.pad_token = self.tokenizer.eos_token
+    llm = AutoModelForCausalLM.from_pretrained(
+        model, torch_dtype=torch.float16, trust_remote_code=trust_remote_code)
+    if llm.config.model_type == "llama":
+        # To enable padding in the HF backend.
+        tokenizer.pad_token = tokenizer.eos_token
+    llm = llm.cuda()
 
-    def generate(self, requests: List[Tuple[str, int, int]], 
-                 sampling_params: SamplingParams = None):
-        for i in tqdm(range(len(requests))):
-            prompt, prompt_len, output_len = requests[i] 
-            output = self.run_seq(prompt, i, output_len, sampling_params)
-            print(f'input: {prompt}\ninput_len: {prompt_len}\n')
-            print(f'output: {output}\noutput_len: {len(output)}\n\n')
+    input_num_tokens = []
+    output_num_tokens = []
+    start = time.perf_counter()
+    for i in range(len(requests)):
+        prompt, prompt_len, output_len = requests[i]
+        # Generate the sequences.
+        input_ids = tokenizer(prompt, return_tensors="pt",
+                              padding=True).input_ids
+        llm_outputs = llm.generate(
+            input_ids=input_ids.cuda(),
+            do_sample=False,
+            num_return_sequences=1,
+            num_beams=1,
+            temperature=1.0,
+            top_p=1.0,
+            use_cache=True,
+            max_new_tokens=output_len,
+        )
+        # Include the decoding time.
+        tokenizer.decode(llm_outputs[0], skip_special_tokens=True)
+        input_num_tokens.append(len(input_ids[0]))
+        output_num_tokens.append(len(llm_outputs[0]))
 
-    def run_seq(self, request, request_id, output_len, 
-                sampling_params: SamplingParams = None):
-        input_id = self.tokenizer.encode(request)
-        seq = Sequence(request_id, request, input_id, block_size=0)   
 
-        for i in range(output_len):
-            sampling_metadata = _prepare_sample(seq, sampling_params)
+    end = time.perf_counter()
+    return end - start, input_num_tokens, output_num_tokens
 
-            position = torch.arange(0, seq.get_len())
-            seq_token_ids = seq.get_token_ids()
-            seq_token_ids = torch.tensor(seq_token_ids, dtype=torch.long, device=self.device)
-            hidden_state = self.model(seq_token_ids, position, None, None)
-            sample_output = self.model.sample(hidden_state, sampling_metadata)
-            new_token_id = sample_output[-1].samples[-1].output_token
-            tokens_logprob = sample_output[-1].samples[-1].logprobs
-            seq.append_token_id(new_token_id, tokens_logprob)
 
-            if (seq.get_last_token_id() == self.tokenizer.eos_token_id):
-                break
-        output_token_ids = seq.get_output_token_ids()
-        output = self.tokenizer.decode(output_token_ids, skip_special_tokens=True)
-        return output
+
+def main(args: argparse.Namespace):
+    print(args)
+    random.seed(args.seed)
+
+    # Sample the requests.
+    tokenizer = AutoTokenizer.from_pretrained(
+        args.tokenizer, trust_remote_code=args.trust_remote_code)
+    if args.dataset is None:
+        # Synthesize a prompt with the given input length.
+        prompt = "hi" * (args.input_len - 1)
+        requests = [(prompt, args.input_len, args.output_len)
+                    for _ in range(args.num_samples)]
+
+    else:
+        with open(args.dataset) as f:
+            requests = json.load(f)
+
+    if args.num_samples is not None:
+        requests = requests[0:args.num_samples]
+
+    elapsed_time, input_num_tokens, output_num_tokens = run_hf(requests, args.model, tokenizer,  args.trust_remote_code)
+    prompt_num_tokens = sum(prompt_len for prompt_len in input_num_tokens)
+    total_num_tokens = sum(output_len for output_len in output_num_tokens)
+    print(f"Throughput: {len(requests) / elapsed_time:.2f} requests/s \n"
+          f"Tokens/s: {total_num_tokens / elapsed_time:.2f} tokens/s \n"
+          f"Prompt_num_tokens:{prompt_num_tokens:.2f} tokens \n"
+          f"Total_num_tokens:{total_num_tokens:.2f} tokens \n")
 
 
 if __name__ == "__main__":
-    model_config_llama = ModelConfig("/data/7B-chat-hf", "/data/7B-chat-hf", True, 1, None)
-    LLama = LLamaEngine(model_config_llama)
-    with open('./scrambled_sampled_dataset.json') as f:
-        requests = json.load(f)
-    sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
-    LLama.generate(requests, sampling_params=sampling_params)
+    parser = argparse.ArgumentParser(description="Benchmark the throughput.")
+    parser.add_argument("--dataset", type=str, default=None, help="Path to the dataset.")
+    parser.add_argument("--model", type=str, default="meta/llama2-70b")
+    parser.add_argument("--tokenizer", type=str, default=None)
+    parser.add_argument("--input-len", type=int, default=None, help="Input prompt length for each request")
+    parser.add_argument("--output-len", type=int, default=None, help="Output length for each request")
+    parser.add_argument("--num-samples", type=int, default=None, help="Number of first few samples used for inference test")
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument('--trust-remote-code',
+                        action='store_true',
+                        help='trust remote code from huggingface')
+    parser.add_argument(
+        '--dtype',
+        type=str,
+        default='auto',
+        choices=['auto', 'half', 'float16', 'bfloat16', 'float', 'float32'],
+        help='data type for model weights and activations. '
+        'The "auto" option will use FP16 precision '
+        'for FP32 and FP16 models, and BF16 precision '
+        'for BF16 models.')
+    args = parser.parse_args()
+    if args.tokenizer is None:
+        args.tokenizer = args.model
+    if args.dataset is None:
+        assert args.input_len is not None
+        assert args.output_len is not None
+    else:
+        assert args.input_len is None
+        assert args.output_len is None
+
+    main(args)

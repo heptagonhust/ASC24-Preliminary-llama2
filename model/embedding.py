@@ -23,10 +23,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Rotary Positional Embeddings."""
-from typing import Tuple
+import math
+from typing import Any, Dict, Optional, Tuple, Union
 
-import torch.nn as nn
 import torch
+import torch.nn as nn
 
 from vllm._C import ops
 

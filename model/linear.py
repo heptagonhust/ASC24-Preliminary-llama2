@@ -1,22 +1,3 @@
-# coding=utf-8
-# Adapted from
-# Copyright 2024 Hust-heptagon team
-# Copyright 2023 The vLLM team.
-# https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/layers/rotary_embedding.py
-# This code is based on vLLM library
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
@@ -25,9 +6,9 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
 #! rewrite needed
-from model.parallel_utils.parallel_state import (
+from utils.parallel_state import (
     get_tensor_model_parallel_rank, get_tensor_model_parallel_world_size)
-from model.parallel_utils.communication_op import (
+from utils.communication_op import (
     tensor_model_parallel_all_reduce, tensor_model_parallel_all_gather)
 from utils.utils import (
     divide, split_tensor_along_last_dim)
