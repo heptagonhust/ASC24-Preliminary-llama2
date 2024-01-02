@@ -39,15 +39,20 @@ class Sampler(nn.Module):
         embedding_bias: Optional[torch.Tensor] = None,
     ) -> SamplerOutput:
         # Get the hidden states that we use for sampling.
-        hidden_states = _prune_hidden_states(hidden_states, sampling_metadata)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1]).index_select(
+                                            0, sampling_metadata.selected_token_indices)
 
         # Get the logits for the next tokens.
+        #! projection from hidden_states of last generated token to logits of token
+        #! using weight in ParallelLMHead
         logits = _get_logits(hidden_states, embedding, embedding_bias,
                              self.vocab_size)
 
         _, vocab_size = logits.shape
 
         # Apply logits processors (if any).
+        #! user specified function to modify logits
+        #! get from sampling_params.logits_processors
         logits = _apply_logits_processors(logits, sampling_metadata)
 
         # Prepare sampling tensors with pinned memory to avoid blocking.
