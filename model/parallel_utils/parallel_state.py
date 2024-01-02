@@ -10,7 +10,7 @@ import os
 import random
 import numpy as np
 import subprocess
-from config import ParallelConfig, ModelConfig
+from model.model_metadata import ParallelConfig, ModelConfig
 from typing import Optional
 # Tensor model parallel group that the current rank belongs to.
 _TENSOR_MODEL_PARALLEL_GROUP = None

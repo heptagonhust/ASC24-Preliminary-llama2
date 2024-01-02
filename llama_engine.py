@@ -1,6 +1,7 @@
 from sampler.sampling_metadata import SamplingParams, _prepare_sample
-from model.model_metadata import ModelConfig
+from model.model_metadata import ModelConfig,ParallelConfig
 from model.llama import LlamaForCausalLM
+from model.parallel_utils.parallel_state import setup_distributed
 from sequence.sequence import Sequence 
 
 from transformers import AutoTokenizer
@@ -22,9 +23,10 @@ def _set_default_torch_dtype(dtype: torch.dtype):
     torch.set_default_dtype(old_dtype)
 
 class LLamaEngine():
-    def __init__(self, model_config: ModelConfig) -> nn.Module:
+    def __init__(self, model_config: ModelConfig, parallel_config_llama:ParallelConfig) -> nn.Module:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         random.seed(model_config.seed)
+        setup_distributed(parallel_config_llama)
         with _set_default_torch_dtype(model_config.dtype):
             # 在GPU中建立模型，同时根据TP将模型进行切分，因此开辟的显存空间是切分后的模型大小
             model = LlamaForCausalLM(model_config.hf_model_config)  
