@@ -93,10 +93,10 @@ class GroupAttention(nn.Module):
         value = value.view(batch_size, seq_len, self.num_kv_heads, self.head_size)
         value = value[:, :, :, None, :].expand(batch_size, seq_len, self.num_kv_heads, self.num_queries_per_kv, value.shape[-1])
         value = value.view(batch_size, seq_len, -1, value.shape[-1]).transpose(1, 2)
+        
         seq_len = query.size(2)
-        self.seq_mask = subsequent_mask(seq_len)
-        mask = self.seq_mask.to(device)
-        output, _ = attention(query=query, key=key, value=value, mask=mask, dropout=None)
+        self.seq_mask = subsequent_mask(seq_len).to(device)
+        output, _ = attention(query=query, key=key, value=value, mask=self.seq_mask, dropout=None)
 
         output = output.transpose(1, 2).contiguous()
         # Reshape the output tensor.
@@ -119,7 +119,7 @@ def attention(query, key, value, mask=None, dropout=None):
     d_k = query.size(-1)
     scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)
     if mask is not None:
-        scores = scores.masked_fill(mask == 0, -1e4)  # 使用一个较小的值替代 -1e9
+        scores = scores.masked_fill(mask == 0, -5e4)  # 使用一个较小的值替代 -1e9
     p_attn = scores.softmax(dim=-1)
     if dropout is not None:
         p_attn = dropout(p_attn)

@@ -19,7 +19,7 @@ def _prepare_sample(
     selected_token_indices: List[int] = []
     categorized_sample_indices = {t: [] for t in SamplingType}
 
-    selected_token_indices.append(seq.get_prompt_len() - 1)
+    selected_token_indices.append(seq.get_len() - 1)
     selected_token_indices = _async_h2d(selected_token_indices,
                                         dtype=torch.long,
                                         pin_memory=True)

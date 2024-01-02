@@ -45,11 +45,11 @@ class LLamaEngine():
                  sampling_params: SamplingParams = None):
         for i in tqdm(range(len(requests))):
             prompt, prompt_len, output_len = requests[i] 
-            output = self.run_seq(prompt, i, prompt_len, output_len, sampling_params)
+            output = self.run_seq(prompt, i, output_len, sampling_params)
             print(f'input: {prompt}\ninput_len: {prompt_len}\n')
             print(f'output: {output}\noutput_len: {len(output)}\n\n')
 
-    def run_seq(self, request, request_id, prompt_len, output_len, 
+    def run_seq(self, request, request_id, output_len, 
                 sampling_params: SamplingParams = None):
         input_id = self.tokenizer.encode(request)
         seq = Sequence(request_id, request, input_id, block_size=0)   
@@ -80,5 +80,3 @@ if __name__ == "__main__":
         requests = json.load(f)
     sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
     LLama.generate(requests, sampling_params=sampling_params)
-        
-        
