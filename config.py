@@ -1,5 +1,6 @@
 from utils.transformers_lib import get_config_from_hf, get_max_len_from_hf
-
+from typing import Optional
+import torch
 class ModelConfig:
     def __init__(
         self,
@@ -7,7 +8,7 @@ class ModelConfig:
         tokenizer: str,
         trust_remote_code: bool,
         seed: int,
-        max_model_len: int
+        max_model_len: Optional[int]
     ) -> None:
         self.model = model
         self.tokenizer = tokenizer
@@ -16,6 +17,8 @@ class ModelConfig:
 
         self.hf_model_config = get_config_from_hf(model, trust_remote_code)
         self.max_model_len = get_max_len_from_hf(self.hf_model_config, max_model_len)
+        
+        self.dtype = torch.float16
         
 
 

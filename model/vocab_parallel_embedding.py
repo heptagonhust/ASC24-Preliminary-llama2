@@ -27,6 +27,7 @@ def vocab_range_from_per_partition_vocab_size(per_partition_vocab_size: int,
 
 
 
+#! world_size: only tp parallelism scale
 def vocab_range_from_global_vocab_size(global_vocab_size: int, rank: int,
                                        world_size: int) -> Sequence[int]:
     per_partition_vocab_size = divide(global_vocab_size, world_size)
@@ -54,18 +55,22 @@ class VocabParallelEmbedding(torch.nn.Module):
 
         # Keep the input dimensions.
         self.num_embeddings = num_embeddings
+        #! length after padding
         self.num_embeddings_padded = pad_vocab_size(num_embeddings)
         self.embedding_dim = embedding_dim
         if params_dtype is None:
             params_dtype = torch.get_default_dtype()
         self.tp_size = get_tensor_model_parallel_world_size()
         # Divide the weight matrix along the vocaburaly dimension.
+        #! vocab_range_from_global_vocab_size: return first and last index
         self.vocab_start_index, self.vocab_end_index = (
             vocab_range_from_global_vocab_size(
                 self.num_embeddings_padded, get_tensor_model_parallel_rank(),
                 self.tp_size))
         self.num_embeddings_per_partition = (self.vocab_end_index -
                                              self.vocab_start_index)
+        #! output dim: num_embeddings_per_partition
+        #! input dim: embedding_dim
         self.weight = Parameter(
             torch.empty(self.num_embeddings_per_partition,
                         self.embedding_dim,
@@ -123,6 +128,7 @@ class ParallelLMHead(VocabParallelEmbedding):
                  bias: bool = False,
                  params_dtype: Optional[torch.dtype] = None):
         super().__init__(num_embeddings, embedding_dim, params_dtype)
+        #! without bias in llama case
         if bias:
             self.bias = Parameter(
                 torch.empty(self.num_embeddings_per_partition,
@@ -134,7 +140,8 @@ class ParallelLMHead(VocabParallelEmbedding):
             })
         else:
             self.register_parameter("bias", None)
-
+    
+    #! can not call ParallelLMHead() directly, use ParallelLMHead.weight instead
     def forward(self, input_):
         del input_
         raise RuntimeError("LMHead's weights should be used in the sampler.")

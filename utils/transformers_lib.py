@@ -1,6 +1,6 @@
 from typing import Optional
 from transformers import (AutoConfig, PretrainedConfig ,AutoModelForCausalLM, 
-                          AutoTokenizer, PreTrainedTokenizerBase)
+                          AutoTokenizer, PreTrainedTokenizerBase,LlamaConfig)
 
 def get_config_from_hf(
     model: str,
@@ -12,7 +12,7 @@ def get_max_len_from_hf(
     hf_model_config: PretrainedConfig,
     max_model_len: Optional[int],
 ) -> int:
-    max_len_hf = hf_model_config.max_poition_embeddings
+    max_len_hf = hf_model_config.max_length
     default_max_len = 2048
     
     if max_model_len is not None:
@@ -34,7 +34,8 @@ def get_max_len_from_hf(
     else:
         if max_len_hf == float("inf"):
             max_len = default_max_len
-    
+        else :
+             max_len = max_len_hf
     return int(max_len)
     
             
