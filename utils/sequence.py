@@ -3,6 +3,8 @@ import copy
 import enum
 from typing import Dict, List, Optional, Union
 
+from utils.block import LogicalTokenBlock
+from utils.sampling_params import SamplingParams
 
 PromptLogprobs = List[Optional[Dict[int, float]]]
 SampleLogprobs = List[Dict[int, float]]
@@ -120,6 +122,7 @@ class Sequence:
         self.output_logprobs: SampleLogprobs = []
         self.output_text = ""
 
+        self.logical_token_blocks: List[LogicalTokenBlock] = []
         # Initialize the logical token blocks with the prompt token ids.
         # self._append_tokens_to_blocks(prompt_token_ids)
         self.status = SequenceStatus.WAITING
@@ -129,6 +132,29 @@ class Sequence:
         self.read_offset = 0
         # Input + output tokens
         self.tokens: Optional[List[str]] = None
+
+    def _append_logical_block(self) -> None:
+        block = LogicalTokenBlock(
+            block_number=len(self.logical_token_blocks),
+            block_size=self.block_size,
+        )
+        self.logical_token_blocks.append(block)
+
+    def _append_tokens_to_blocks(self, token_ids: List[int]) -> None:
+        cursor = 0
+        while cursor < len(token_ids):
+            if not self.logical_token_blocks:
+                self._append_logical_block()
+
+            last_block = self.logical_token_blocks[-1]
+            if last_block.is_full():
+                self._append_logical_block()
+                last_block = self.logical_token_blocks[-1]
+
+            num_empty_slots = last_block.get_num_empty_slots()
+            last_block.append_tokens(token_ids[cursor:cursor +
+                                               num_empty_slots])
+            cursor += num_empty_slots
 
     def append_token_id(
         self,
@@ -194,6 +220,138 @@ class Sequence:
                 f"num_blocks={len(self.logical_token_blocks)})")
 
 
+class SequenceGroup:
+    """A group of sequences that are generated from the same prompt.
+
+    Args:
+        request_id: The ID of the request.
+        seqs: The list of sequences.
+        sampling_params: The sampling parameters used to generate the outputs.
+        arrival_time: The arrival time of the request.
+    """
+
+    def __init__(
+        self,
+        request_id: str,
+        seqs: List[Sequence],
+        sampling_params: SamplingParams,
+        arrival_time: float,
+    ) -> None:
+        self.request_id = request_id
+        self.seqs_dict = {seq.seq_id: seq for seq in seqs}
+        self.sampling_params = sampling_params
+        self.arrival_time = arrival_time
+        self.prompt_logprobs: Optional[PromptLogprobs] = None
+
+    @property
+    def prompt(self) -> str:
+        # All sequences in the group should have the same prompt.
+        # We use the prompt of an arbitrary sequence.
+        return next(iter(self.seqs_dict.values())).prompt
+
+    @property
+    def prompt_token_ids(self) -> List[int]:
+        # All sequences in the group should have the same prompt.
+        # We use the prompt of an arbitrary sequence.
+        return next(iter(self.seqs_dict.values())).data.prompt_token_ids
+
+    def get_max_num_running_seqs(self) -> int:
+        """The maximum number of sequences running in parallel in the remaining
+        lifetime of the request."""
+        if self.sampling_params.use_beam_search:
+            # For beam search, maximally there will always be `best_of` beam
+            # candidates running in the future.
+            return self.sampling_params.best_of
+        else:
+            if self.sampling_params.best_of > self.num_seqs():
+                # At prompt stage, the sequence group is not yet filled up
+                # and only have one sequence running. However, in the
+                # generation stage, we will have `best_of` sequences running.
+                return self.sampling_params.best_of
+            # At sampling stages, return the number of actual sequences
+            # that are not finished yet.
+            return self.num_unfinished_seqs()
+
+    def get_seqs(
+        self,
+        status: Optional[SequenceStatus] = None,
+    ) -> List[Sequence]:
+        if status is None:
+            return list(self.seqs_dict.values())
+        else:
+            return [
+                seq for seq in self.seqs_dict.values() if seq.status == status
+            ]
+
+    def get_unfinished_seqs(self) -> List[Sequence]:
+        return [
+            seq for seq in self.seqs_dict.values() if not seq.is_finished()
+        ]
+
+    def get_finished_seqs(self) -> List[Sequence]:
+        return [seq for seq in self.seqs_dict.values() if seq.is_finished()]
+
+    def num_seqs(self, status: Optional[SequenceStatus] = None) -> int:
+        return len(self.get_seqs(status))
+
+    def num_unfinished_seqs(self) -> int:
+        return len(self.get_unfinished_seqs())
+
+    def num_finished_seqs(self) -> int:
+        return len(self.get_finished_seqs())
+
+    def find(self, seq_id: int) -> Sequence:
+        if seq_id not in self.seqs_dict:
+            raise ValueError(f"Sequence {seq_id} not found.")
+        return self.seqs_dict[seq_id]
+
+    def add(self, seq: Sequence) -> None:
+        if seq.seq_id in self.seqs_dict:
+            raise ValueError(f"Sequence {seq.seq_id} already exists.")
+        self.seqs_dict[seq.seq_id] = seq
+
+    def remove(self, seq_id: int) -> None:
+        if seq_id not in self.seqs_dict:
+            raise ValueError(f"Sequence {seq_id} not found.")
+        del self.seqs_dict[seq_id]
+
+    def is_finished(self) -> bool:
+        return all(seq.is_finished() for seq in self.get_seqs())
+
+    def __repr__(self) -> str:
+        return (f"SequenceGroup(request_id={self.request_id}, "
+                f"sampling_params={self.sampling_params}, "
+                f"num_seqs={len(self.seqs_dict)})")
+
+
+class SequenceGroupMetadata:
+    """Metadata for a sequence group. Used to create `InputMetadata`.
+
+
+    Args:
+        request_id: The ID of the request.
+        is_prompt: Whether the request is at prompt stage.
+        seq_data: The sequence data. (Seq id -> sequence data)
+        sampling_params: The sampling parameters used to generate the outputs.
+        block_tables: The block tables. (Seq id -> list of physical block
+            numbers)
+    """
+
+    def __init__(
+        self,
+        request_id: str,
+        is_prompt: bool,
+        seq_data: Dict[int, SequenceData],
+        sampling_params: SamplingParams,
+        block_tables: Dict[int, List[int]],
+    ) -> None:
+        self.request_id = request_id
+        self.is_prompt = is_prompt
+        self.seq_data = seq_data
+        self.sampling_params = sampling_params
+        self.block_tables = block_tables
+
+
 class SequenceOutput:
     """The model output associated with a sequence.
 
@@ -253,3 +411,30 @@ class SequenceGroupOutput:
 # For each sequence group, we generate a list of SequenceOutput object,
 # each of which contains one possible candidate for the next token.
 SamplerOutput = List[SequenceGroupOutput]
+
+class SchedulerOutputs:
+
+    def __init__(
+        self,
+        scheduled_seq_groups: List[SequenceGroup],
+        prompt_run: bool,
+        num_batched_tokens: int,
+        blocks_to_swap_in: Dict[int, int],
+        blocks_to_swap_out: Dict[int, int],
+        blocks_to_copy: Dict[int, List[int]],
+        ignored_seq_groups: List[SequenceGroup],
+    ) -> None:
+        self.scheduled_seq_groups = scheduled_seq_groups
+        self.prompt_run = prompt_run
+        self.num_batched_tokens = num_batched_tokens
+        self.blocks_to_swap_in = blocks_to_swap_in
+        self.blocks_to_swap_out = blocks_to_swap_out
+        self.blocks_to_copy = blocks_to_copy
+        # Swap in and swap out should never happen at the same time.
+        assert not (blocks_to_swap_in and blocks_to_swap_out)
+        self.ignored_seq_groups = ignored_seq_groups
+
+    def is_empty(self) -> bool:
+        # NOTE: We do not consider the ignored sequence groups.
+        return (not self.scheduled_seq_groups and not self.blocks_to_swap_in
+                and not self.blocks_to_swap_out and not self.blocks_to_copy)

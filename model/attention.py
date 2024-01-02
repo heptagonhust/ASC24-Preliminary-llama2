@@ -1,8 +1,14 @@
 from typing import List, Optional
+
 import torch
 import torch.nn as nn
 import math
-from model.model_metadata import InputMetadata
+from xformers import ops as xops
+from xformers.ops.fmha.attn_bias import (BlockDiagonalCausalMask,
+                                         LowerTriangularMaskWithTensorBias)
+
+from vllm._C import ops, cache_ops
+from model.input_metadata import InputMetadata
 
 _SUPPORTED_HEAD_SIZES = [64, 80, 96, 112, 128, 256]
 # Should be the same as PARTITION_SIZE in `paged_attention_v2_launcher`.

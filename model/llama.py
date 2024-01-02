@@ -29,23 +29,23 @@ import torch
 from torch import nn
 from transformers import LlamaConfig
 
-from model.model_metadata import InputMetadata
-from model.layers.activate import SiluAndMul
-from model.layers.attention import GroupAttention
-from model.layers.layernorm import RMSNorm
-from model.layers.linear import (LinearMethodBase, 
+from model.input_metadata import InputMetadata
+from model.activate import SiluAndMul
+from model.attention import GroupAttention
+from model.layernorm import RMSNorm
+from model.linear import (LinearMethodBase, 
                           MergedColumnParallelLinear,
                           QKVParallelLinear,
                           RowParallelLinear)
-from model.layers.embedding import RotaryEmbedding
-from sampler.sampler import Sampler
-from model.layers.vocab_parallel_embedding import (
+from model.embedding import RotaryEmbedding
+from model.sampler import Sampler
+from model.vocab_parallel_embedding import (
     VocabParallelEmbedding, ParallelLMHead)
-from model.parallel_utils.parallel_state import (
+from utils.parallel_state import (
     get_tensor_model_parallel_world_size)
-from sampler.sampling_metadata import SamplingMetadata
-from model.weight_utils import (default_weight_loader,hf_model_weights_iterator)
-from sequence.sequence import SamplerOutput
+from utils.sampling_metadata import SamplingMetadata
+from utils.weight_utils import (default_weight_loader,hf_model_weights_iterator)
+from utils.sequence import SamplerOutput
 
 KVCache = Tuple[torch.Tensor, torch.Tensor]
 
