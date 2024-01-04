@@ -5,7 +5,13 @@
 """Tensor and pipeline parallel groups."""
 
 import torch
-
+import torch.distributed as dist
+import os
+import random
+import numpy as np
+import subprocess
+from model.model_metadata import ParallelConfig, ModelConfig
+from typing import Optional
 # Tensor model parallel group that the current rank belongs to.
 _TENSOR_MODEL_PARALLEL_GROUP = None
 # Pipeline model parallel group that the current rank belongs to.
@@ -15,7 +21,31 @@ _PIPELINE_MODEL_PARALLEL_GROUP = None
 # source rank when broadcasting from the first or last pipeline stage.
 _PIPELINE_GLOBAL_RANKS = None
 
+def setup_distributed(parallel_config:ParallelConfig, backend="nccl", port=None):
+    """Initialize distributed training environment.
+    support both slurm and torch.distributed.launch
+    see torch.distributed.init_process_group() for more details
+    """
+    num_gpus = torch.cuda.device_count()
+    os.environ["TORCH_NCCL_AVOID_RECORD_STREAMS"] = "1"
 
+    rank = int(os.environ["RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+
+    torch.cuda.set_device(rank % num_gpus)
+
+    dist.init_process_group(
+        backend=backend,
+        world_size=world_size,
+        rank=rank,
+    )
+
+    # A small all_reduce for warmup.
+    dist.all_reduce(torch.zeros(1).cuda())
+    initialize_model_parallel(parallel_config.tensor_parallel_size,
+                              parallel_config.pipeline_parallel_size)
+
+                   
 def initialize_model_parallel(
     tensor_model_parallel_size: int = 1,
     pipeline_model_parallel_size: int = 1,
@@ -43,8 +73,8 @@ def initialize_model_parallel(
     ranks 8 to 15 belong to the second box.
     """
     # Get world size and rank. Ensure some consistencies.
-    assert torch.distributed.is_initialized()
-    world_size: int = torch.distributed.get_world_size()
+    assert dist.is_initialized()
+    world_size: int = dist.get_world_size()
 
     if (world_size !=
             tensor_model_parallel_size * pipeline_model_parallel_size):  # 2 * 3
@@ -57,7 +87,7 @@ def initialize_model_parallel(
                                              tensor_model_parallel_size)  # 3
     num_pipeline_model_parallel_groups: int = (world_size //
                                                pipeline_model_parallel_size)  # 2
-    rank = torch.distributed.get_rank()
+    rank = dist.get_rank()
 
     # Build the tensor model-parallel groups.
     global _TENSOR_MODEL_PARALLEL_GROUP
@@ -66,7 +96,7 @@ def initialize_model_parallel(
     for i in range(num_tensor_model_parallel_groups):  # 3
         ranks = range(i * tensor_model_parallel_size,
                       (i + 1) * tensor_model_parallel_size)  # (0,1) (2,3) (4,5)
-        group = torch.distributed.new_group(ranks)  # 划分了三个group
+        group = dist.new_group(ranks)  # 划分了三个group
         if rank in ranks:
             _TENSOR_MODEL_PARALLEL_GROUP = group
 
@@ -77,7 +107,7 @@ def initialize_model_parallel(
         "pipeline model parallel group is already initialized")
     for i in range(num_pipeline_model_parallel_groups):  # 2
         ranks = range(i, world_size, num_pipeline_model_parallel_groups)  # (0,2,4) (1,3,5)
-        group = torch.distributed.new_group(ranks)  # 划分了两个group
+        group = dist.new_group(ranks)  # 划分了两个group
         if rank in ranks:
             _PIPELINE_MODEL_PARALLEL_GROUP = group
             _PIPELINE_GLOBAL_RANKS = ranks
@@ -105,33 +135,31 @@ def get_pipeline_model_parallel_group():
 
 def get_tensor_model_parallel_world_size():
     """Return world size for the tensor model parallel group."""
-    # return torch.distributed.get_world_size(
-    #     group=get_tensor_model_parallel_group())
-    return 1
+    return dist.get_world_size(
+        group=get_tensor_model_parallel_group())
 
 
 def get_pipeline_model_parallel_world_size():
     """Return world size for the pipeline model parallel group."""
-    return torch.distributed.get_world_size(
+    return dist.get_world_size(
         group=get_pipeline_model_parallel_group())
 
 
 def get_tensor_model_parallel_rank():
     """Return my rank for the tensor model parallel group."""
-    # return torch.distributed.get_rank(group=get_tensor_model_parallel_group())
-    return 0
+    return dist.get_rank(group=get_tensor_model_parallel_group())
 
 
 def get_pipeline_model_parallel_rank():
     """Return my rank for the pipeline model parallel group."""
-    return torch.distributed.get_rank(
+    return dist.get_rank(
         group=get_pipeline_model_parallel_group())
 
 
 def get_tensor_model_parallel_src_rank():
     """Calculate the global rank corresponding to the first local rank
     in the tensor model parallel group."""
-    global_rank = torch.distributed.get_rank()
+    global_rank = dist.get_rank()
     local_world_size = get_tensor_model_parallel_world_size()
     return (global_rank // local_world_size) * local_world_size
 
