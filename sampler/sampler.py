@@ -399,7 +399,11 @@ def _sample(
     sampling_metadata: SamplingMetadata,
 ) -> List[Tuple[List[int], List[int]]]:
     categorized_seq_group_ids = {t: [] for t in SamplingType}
+    #! Dict[SamplingType: List[int]] int: 
     categorized_sample_indices = sampling_metadata.categorized_sample_indices
+    #! sampling_metadata.seq_groups: List[Tuple[List[int], SamplingParams]]
+    #!      each element of the list is a seq_group
+    #! put seq_group index into categorized_seq_group_ids
     for i, seq_group in enumerate(sampling_metadata.seq_groups):
         _, sampling_params = seq_group
         sampling_type = sampling_params.sampling_type
@@ -411,11 +415,14 @@ def _sample(
     # Counterintiutively, having two loops here is actually faster.
     # The first loop can run without waiting on GPU<->CPU sync.
     for sampling_type in SamplingType:
+        #! token index of seqs to be sampled belongs to this category
         sample_indices = categorized_sample_indices[sampling_type]
         num_tokens = len(sample_indices)
         if num_tokens == 0:
             continue
+        #! all seq groups id belong to this category
         seq_group_ids = categorized_seq_group_ids[sampling_type]
+        #! list of seq groups of this category
         seq_groups = [sampling_metadata.seq_groups[i] for i in seq_group_ids]
         is_prompts = [i < sampling_metadata.num_prompts for i in seq_group_ids]
         sample_metadata[sampling_type] = (seq_group_ids, seq_groups,
@@ -428,6 +435,7 @@ def _sample(
                 if is_prompt:
                     _, sampling_params = seq_group
                     max_best_of = max(max_best_of, sampling_params.best_of)
+            #! prob: Tensor(sample_seq_len, token_space_size)
             multinomial_samples = _multinomial(probs[sample_indices],
                                                max_best_of)
         elif sampling_type == SamplingType.BEAM:

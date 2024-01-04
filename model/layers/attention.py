@@ -82,11 +82,11 @@ class GroupAttention(nn.Module):
 
         key = key.view(batch_size, seq_len, self.num_kv_heads, self.head_size)
         key = key[:, :, :, None, :].expand(batch_size, seq_len, self.num_kv_heads, self.num_queries_per_kv, key.shape[-1])
-        key = key.view(batch_size, seq_len, -1, key.shape[-1]).transpose(1, 2)
+        key = key.reshape(batch_size, seq_len, -1, key.shape[-1]).transpose(1, 2)
 
         value = value.view(batch_size, seq_len, self.num_kv_heads, self.head_size)
         value = value[:, :, :, None, :].expand(batch_size, seq_len, self.num_kv_heads, self.num_queries_per_kv, value.shape[-1])
-        value = value.view(batch_size, seq_len, -1, value.shape[-1]).transpose(1, 2)
+        value = value.reshape(batch_size, seq_len, -1, value.shape[-1]).transpose(1, 2)
         
         seq_len = query.size(2)
         self.seq_mask = subsequent_mask(seq_len).to(device)
