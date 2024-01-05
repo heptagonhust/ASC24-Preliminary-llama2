@@ -47,16 +47,11 @@ class LLamaEngine():
         input_id = self.tokenizer.encode(request)
         seq = Sequence(request_id, request, input_id, block_size=0)   
 
-        for i in range(max_output_len):
-            if i == 0:
-                new_token_id, new_token_logprob = self.run_worker("run_model", request_id, seq)
-            else:
-                new_token_id, new_token_logprob = self.run_worker("run_model", request_id)
-            seq.append_token_id(new_token_id, new_token_logprob)
-            if (new_token_id == self.tokenizer.eos_token_id):
-                break
-
-        output_token_ids = seq.get_output_token_ids()
+        output_token_ids = self.run_worker("run_model", 
+                                 request_id, 
+                                 max_output_len, 
+                                 self.tokenizer.eos_token_id, 
+                                 seq)
         output = self.tokenizer.decode(output_token_ids, skip_special_tokens=True)
         return output
 
