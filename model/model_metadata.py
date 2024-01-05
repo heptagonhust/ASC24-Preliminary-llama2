@@ -1,6 +1,7 @@
+import os
+import torch
 from utils.transformers_utils import get_config_from_hf, get_max_len_from_hf
 from typing import List, Optional
-import torch
 
 class ParallelConfig:
     """Configuration for the distributed execution.
@@ -17,13 +18,15 @@ class ParallelConfig:
         self,
         pipeline_parallel_size: int,
         tensor_parallel_size: int,
-        num_cpus_per_worker: int = 4,
-        num_gpus_per_worker: int = 1
+        num_cpus_per_worker: int = 2,
+        num_gpus_per_worker: int = 1,
+        workers_per_node: int = 2,
     ) -> None:
         self.pipeline_parallel_size = pipeline_parallel_size
         self.tensor_parallel_size = tensor_parallel_size
         self.num_cpus_per_worker = num_cpus_per_worker
         self.num_gpus_per_worker = num_gpus_per_worker
+        self.workers_per_node = workers_per_node
 
         self.world_size = pipeline_parallel_size * tensor_parallel_size
         if self.world_size > 1:
@@ -31,6 +34,12 @@ class ParallelConfig:
         self._verify_args()
 
     def _verify_args(self) -> None:
+        num_nodes = int(os.environ.get("SLURM_NNODES"))
+        assert num_nodes is not None, \
+            "SLURM_NNODES is None, cannot check args validity"
+        assert self.world_size // self.workers_per_node == num_nodes, \
+            "num of placement groups != num of nodes"
+        
         if self.pipeline_parallel_size > 1:
             raise NotImplementedError(
                 "Pipeline parallelism is not supported yet.")
