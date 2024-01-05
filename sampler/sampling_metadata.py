@@ -34,6 +34,19 @@ class SamplingMetadata:
 
         self.num_prompts = len(prompt_lens)
 
+    def _update(self, seq_id: int, new_token_id: int,
+                new_token_logprob: float) -> None:
+        """Update the sampling metadata with the new token."""
+        self.seq_data[seq_id].append_token_id(new_token_id, new_token_logprob)
+
+        selected_token_indices: List[int] = []
+        selected_token_indices.append(self.seq_data[seq_id].get_len() - 1)
+        selected_token_indices = _async_h2d(selected_token_indices,
+                                            dtype=torch.long,
+                                            pin_memory=True)
+        self.selected_token_indices = selected_token_indices
+
+
     def __repr__(self) -> str:
         return (
             "SamplingMetadata("
