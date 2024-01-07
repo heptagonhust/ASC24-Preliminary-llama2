@@ -21,6 +21,30 @@ _PIPELINE_MODEL_PARALLEL_GROUP = None
 # source rank when broadcasting from the first or last pipeline stage.
 _PIPELINE_GLOBAL_RANKS = None
 
+def setup_distributed(parallel_config:ParallelConfig, backend="nccl", port=None):
+    """Initialize distributed training environment.
+    support both slurm and torch.distributed.launch
+    see torch.distributed.init_process_group() for more details
+    """
+    num_gpus = torch.cuda.device_count()
+    os.environ["TORCH_NCCL_AVOID_RECORD_STREAMS"] = "1"
+
+    rank = int(os.environ["RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+
+    torch.cuda.set_device(rank % num_gpus)
+
+    dist.init_process_group(
+        backend=backend,
+        world_size=world_size,
+        rank=rank,
+    )
+
+    # A small all_reduce for warmup.
+    dist.all_reduce(torch.zeros(1).cuda())
+    initialize_model_parallel(parallel_config.tensor_parallel_size,
+                              parallel_config.pipeline_parallel_size)
+
                    
 def initialize_model_parallel(
     tensor_model_parallel_size: int = 1,

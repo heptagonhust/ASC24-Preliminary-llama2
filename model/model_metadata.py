@@ -17,13 +17,11 @@ class ParallelConfig:
         self,
         pipeline_parallel_size: int,
         tensor_parallel_size: int,
-        num_cpus_per_worker: int = 4,
-        num_gpus_per_worker: int = 1
+        max_parallel_loading_workers: Optional[int] = None,
     ) -> None:
         self.pipeline_parallel_size = pipeline_parallel_size
         self.tensor_parallel_size = tensor_parallel_size
-        self.num_cpus_per_worker = num_cpus_per_worker
-        self.num_gpus_per_worker = num_gpus_per_worker
+        self.max_parallel_loading_workers = max_parallel_loading_workers
 
         self.world_size = pipeline_parallel_size * tensor_parallel_size
         if self.world_size > 1:
