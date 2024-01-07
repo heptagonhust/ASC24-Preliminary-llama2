@@ -10,13 +10,12 @@
 #SBATCH --export=ALL
 
 
-export headnode=`hostname -s`
-export headaddr=`hostname -i | awk '{print $2}'`
-export port=6379
+# export headnode=`hostname -s`
+export headnode='hepgpu1'
+export headaddr='192.168.251.101'
 export MASTER_ADDR=$headaddr
 export MASTER_PORT="29500"
-
-export RAY_DEDUP_LOGS=0
+export port=6379
 
 srun -J start_ray ./start_ray_server.sh
 jobID=$(squeue --name start_ray | tail -1 | awk '{print $1}')

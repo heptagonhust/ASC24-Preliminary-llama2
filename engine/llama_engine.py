@@ -1,7 +1,10 @@
+from sampler.sampling_metadata import SamplingParams
+from model.model_metadata import ModelConfig,ParallelConfig
+from sequence.sequence import Sequence
 from functools import partial
-from typing import List, Tuple, Dict
 
 from transformers import AutoTokenizer
+from typing import List, Tuple
 from tqdm import tqdm
 import ray
 from ray.util.placement_group import (
@@ -10,12 +13,7 @@ from ray.util.placement_group import (
 from ray.util.scheduling_strategies import (
     PlacementGroupSchedulingStrategy
 )
-
-from sampler.sampling_metadata import SamplingParams
-from model.model_metadata import ModelConfig,ParallelConfig
-from sequence.sequence import Sequence
 from engine.worker import Worker
-from utils.distributed_utils import get_node_rank_of_pgs
 
 
 class LLamaEngine():
@@ -72,29 +70,24 @@ class LLamaEngine():
         num_cpus_req = num_workers * parallel_config.num_cpus_per_worker
         assert num_gpus >= num_gpus_req, "Not enough GPUs for workers"
         assert num_cpus >= num_cpus_req, "Not enough CPUs for workers"
+        assert num_workers % 2 == 0, "Number of workers must be even to be placed in pairs to nodes"
 
         pg_list: List[PlacementGroup] = []
-        node_rank_pg_table: Dict[int: int] = {}
         self.workers: List[Worker] = []
-
-        assert num_workers % parallel_config.workers_per_node == 0, \
-            "Number of workers must be divisible by workers_per_node to place workers on nodes"
-        for _ in range(num_workers // parallel_config.workers_per_node):
+        for _ in range(num_workers // 2):
             bundles = [{'CPU': parallel_config.num_cpus_per_worker,
-                        'GPU': parallel_config.num_gpus_per_worker}] * parallel_config.workers_per_node
+                        'GPU': parallel_config.num_gpus_per_worker}] * 2
             pg = ray.util.placement_group(bundles, strategy="STRICT_PACK")
             ray.get(pg.ready(), timeout=10)
             pg_list.append(pg)
-        node_rank_pg_table = get_node_rank_of_pgs(pg_list)
         
         for rank in range(num_workers):
-            node_rank = rank // parallel_config.workers_per_node
-            local_rank = rank % parallel_config.workers_per_node
-            pg_index = node_rank_pg_table[node_rank]
+            node_rank = rank // 2
+            local_rank = rank % 2
             worker = ray.remote(num_cpus=parallel_config.num_cpus_per_worker,
                        num_gpus=parallel_config.num_gpus_per_worker,
                        scheduling_strategy=PlacementGroupSchedulingStrategy(
-                           placement_group=pg_list[pg_index],
+                           placement_group=pg_list[node_rank],
                            placement_group_bundle_index=local_rank,
                            placement_group_capture_child_tasks=True)
                        )(Worker).remote(model_config = model_config, 
