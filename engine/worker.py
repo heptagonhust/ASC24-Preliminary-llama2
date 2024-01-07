@@ -47,28 +47,27 @@ class Worker():
             model.load_weights(self.model_config.model)
         self.model = model
 
+    #! only take seq in the first run
     def run_model(self,
                   seq_id: int,
-                  max_output_len: int,
-                  eos_token_id: int,
                   seq: Sequence = None):
-        assert seq is not None, "seq can not be None in the first run"
-        sampling_metadata = _prepare_sample(seq, self.sampling_params)
-        for _ in range(max_output_len):
-            position = torch.arange(0, sampling_metadata.seq_data[seq_id].get_len())
-            seq_token_ids = sampling_metadata.seq_data[seq_id].get_token_ids()
-            seq_token_ids = torch.tensor(seq_token_ids, dtype=torch.long, device=self.device)
+        sampling_metadata = self.sampling_metadata_table.get(seq_id, -1)
+        if sampling_metadata == -1:
+            assert seq is not None, "seq can not be None in the first run"
+            sampling_metadata = _prepare_sample(seq, self.sampling_params)
+            self.sampling_metadata_table[seq_id] = sampling_metadata
 
-            hidden_state = self.model(seq_token_ids, position, None, None)
-            sample_output = self.model.sample(hidden_state, sampling_metadata)
-            new_token_id = sample_output[-1].samples[-1].output_token
-            new_token_logprob = sample_output[-1].samples[-1].logprobs[new_token_id]
-            sampling_metadata._update(seq_id, new_token_id, new_token_logprob)
-            if (new_token_id == eos_token_id):
-                break
-        
-        output_token_ids = sampling_metadata.seq_data[seq_id].output_token_ids
-        return output_token_ids
+        position = torch.arange(0, sampling_metadata.seq_data[seq_id].get_len())
+        seq_token_ids = sampling_metadata.seq_data[seq_id].get_token_ids()
+        seq_token_ids = torch.tensor(seq_token_ids, dtype=torch.long, device=self.device)
+
+        hidden_state = self.model(seq_token_ids, position, None, None)
+        sample_output = self.model.sample(hidden_state, sampling_metadata)
+        new_token_id = sample_output[-1].samples[-1].output_token
+        new_token_logprob = sample_output[-1].samples[-1].logprobs[new_token_id]
+        sampling_metadata._update(seq_id, new_token_id, new_token_logprob)
+
+        return new_token_id, new_token_logprob
 
     def execute_method(self, method, *args, **kargs):
         return getattr(self, method)(*args, **kargs)
