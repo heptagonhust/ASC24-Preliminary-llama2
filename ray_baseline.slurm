@@ -13,8 +13,6 @@
 export headnode=`hostname -s`
 export headaddr=`hostname -i | awk '{print $2}'`
 export port=6379
-export MASTER_ADDR=$headaddr
-export MASTER_PORT="29500"
 
 export RAY_DEDUP_LOGS=0
 

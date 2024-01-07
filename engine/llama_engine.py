@@ -1,5 +1,6 @@
+import os
 from functools import partial
-from typing import List, Tuple, Dict
+from typing import List, Tuple
 
 from transformers import AutoTokenizer
 from tqdm import tqdm
@@ -10,12 +11,12 @@ from ray.util.placement_group import (
 from ray.util.scheduling_strategies import (
     PlacementGroupSchedulingStrategy
 )
+from ray.air.util.torch_dist import init_torch_dist_process_group
 
 from sampler.sampling_metadata import SamplingParams
 from model.model_metadata import ModelConfig,ParallelConfig
 from sequence.sequence import Sequence
-from engine.worker import Worker
-from utils.distributed_utils import get_node_rank_of_pgs
+# from engine.worker import Worker
 
 
 class LLamaEngine():
@@ -29,7 +30,7 @@ class LLamaEngine():
         self.tokenizer.pad_token = self.tokenizer.eos_token
         
         self.init_worker(model_config, parallel_config, sampling_params)
-        self.run_worker("init_distribute")
+        self.init_distributed()
         self.run_worker("init_model")
 
 
@@ -69,7 +70,7 @@ class LLamaEngine():
         assert num_cpus >= num_cpus_req, "Not enough CPUs for workers"
 
         pg_list: List[PlacementGroup] = []
-        node_rank_pg_table: Dict[int: int] = {}
+        from engine.worker import Worker
         self.workers: List[Worker] = []
 
         assert num_workers % parallel_config.workers_per_node == 0, \
@@ -80,23 +81,31 @@ class LLamaEngine():
             pg = ray.util.placement_group(bundles, strategy="STRICT_PACK")
             ray.get(pg.ready(), timeout=10)
             pg_list.append(pg)
-        node_rank_pg_table = get_node_rank_of_pgs(pg_list)
-        
+
+        #! place workers[0], ..., workers[workers_per_node-1]into pg[0];
+        #!       workers[workers_per_node], ...,workers[2workers_per_node-1] into pg[1]
+        #!       ...
+        print(f"test cuda visible devices(master node): {os.environ['CUDA_VISIBLE_DEVICES']}")
         for rank in range(num_workers):
             node_rank = rank // parallel_config.workers_per_node
             local_rank = rank % parallel_config.workers_per_node
-            pg_index = node_rank_pg_table[node_rank]
-            worker = ray.remote(num_cpus=parallel_config.num_cpus_per_worker,
-                       num_gpus=parallel_config.num_gpus_per_worker,
-                       scheduling_strategy=PlacementGroupSchedulingStrategy(
-                           placement_group=pg_list[pg_index],
-                           placement_group_bundle_index=local_rank,
-                           placement_group_capture_child_tasks=True)
-                       )(Worker).remote(model_config = model_config, 
+            worker = ray.remote(
+                        num_cpus=0,
+                        num_gpus=parallel_config.num_gpus_per_worker,
+                        scheduling_strategy=PlacementGroupSchedulingStrategy(
+                            placement_group=pg_list[node_rank],
+                            placement_group_bundle_index=local_rank,
+                            placement_group_capture_child_tasks=True)
+                        )(Worker).remote(model_config = model_config, 
                                         parallel_config = parallel_config,
                                         sampling_params = sampling_params,
                                         rank = rank)
             self.workers.append(worker)
+        
+    def init_distributed(self):
+        init_torch_dist_process_group(self.workers, backend='nccl')
+        self.run_worker("init_distributed")
+        
         
     def run_worker(self, method, *args, **kargs):
         outputs = []

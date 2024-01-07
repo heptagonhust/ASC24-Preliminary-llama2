@@ -18,7 +18,7 @@ class ParallelConfig:
         self,
         pipeline_parallel_size: int,
         tensor_parallel_size: int,
-        num_cpus_per_worker: int = 2,
+        num_cpus_per_worker: int = 1,
         num_gpus_per_worker: int = 1,
         workers_per_node: int = 2,
     ) -> None:

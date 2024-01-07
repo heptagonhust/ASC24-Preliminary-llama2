@@ -1,11 +1,14 @@
+import os
 import contextlib
+from typing import Dict
 
 import torch
-from typing import Dict
+from ray.air.util.torch_dist import TorchDistributedWorker
+
 from utils.utils import set_random_seed
 from model.model_metadata import ParallelConfig, ModelConfig
+from model.parallel_utils.parallel_state import initialize_model_parallel
 from model.llama import LlamaForCausalLM
-from utils.distributed_utils import init_torch_dist
 from sampler.sampling_metadata import SamplingMetadata, _prepare_sample
 from sampler.sampling_params import SamplingParams
 from sequence.sequence import Sequence
@@ -22,12 +25,14 @@ def _set_default_torch_dtype(dtype: torch.dtype):
     class Worker:
         specifiy the jobs that should be placed to all the nodes to run
 '''
-class Worker():
+class Worker(TorchDistributedWorker):
     def __init__(self,
                  model_config: ModelConfig, 
                  parallel_config:ParallelConfig,
                  sampling_params: SamplingParams,
                  rank: int):
+        #! os.environ vairable must be set before the worker use torch
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
         self.model_config = model_config
         self.parallel_config = parallel_config
         self.sampling_params = sampling_params
@@ -35,11 +40,21 @@ class Worker():
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.sampling_metadata_table: Dict[int: SamplingMetadata] = {}
     
-    def init_distribute(self):
-        set_random_seed(self.model_config.seed)
-        init_torch_dist(self.rank, self.parallel_config)
+    def init_distributed(self):
+        os.environ["TORCH_NCCL_AVOID_RECORD_STREAMS"] = "1"
+        self.rank = self.rank if self.rank is not None else int(
+            os.getenv("RANK", "-1"))
+        local_rank = int(os.getenv("LOCAL_RANK", "0"))
+        self.device = torch.device(f"cuda:{local_rank}")
+        if self.rank < 0:
+            raise ValueError("Invalid or unspecified rank.")
+
+        torch.cuda.set_device(self.device)
+        initialize_model_parallel(self.parallel_config.tensor_parallel_size,
+                                  self.parallel_config.pipeline_parallel_size)
 
     def init_model(self):
+        set_random_seed(self.model_config.seed)
         with _set_default_torch_dtype(self.model_config.dtype):
             model = LlamaForCausalLM(self.model_config.hf_model_config)  
             model.to(device=self.device)
