@@ -25,27 +25,24 @@ class BaseLayerInfer:
 class TransformerLayerInfer(BaseLayerInfer):
     """
     """
-    def __init__(self, layer_num, tp_rank, world_size, network_config, mode):
+    def __init__(self, layer_num, num_attention_heads, num_key_value_heads, head_dim):
         self.layer_num_ = layer_num
-        self.tp_rank_ = tp_rank
-        self.world_size_ = world_size
-        self.network_config_ = network_config
-        self.mode = mode
+        self.num_attention_heads_ = num_attention_heads
+        self.head_dim_ = head_dim
+        self.num_key_value_heads_ = num_key_value_heads
         return
 
 class TransformerLayerInferTpl(TransformerLayerInfer):
     """
     """
-    def __init__(self, layer_num, tp_rank, world_size, network_config, mode):
-        super().__init__(layer_num, tp_rank, world_size, network_config, mode)
+    def __init__(self, layer_num, num_attention_heads, num_key_value_heads, head_dim):
+        super().__init__(layer_num, num_attention_heads, num_key_value_heads, head_dim)
         # need to set by subclass
         self.eps_ = 1e-5 
         self.tp_q_head_num_ = -1
         self.tp_k_head_num_ = -1
         self.tp_v_head_num_ = -1
         self.tp_o_head_num_ = -1
-        self.head_dim_ = -1
-        self.embed_dim_ = -1
         return
     
     def _pre_cache_kv(self, infer_state:InferStateInfo)->Tuple[torch.Tensor, torch.Tensor]:
@@ -112,17 +109,13 @@ class LlamaTransformerLayerInfer(TransformerLayerInferTpl):
     """
     """
 
-    def __init__(self, layer_num, tp_rank, world_size, network_config, mode=[]):
-        super().__init__(layer_num, tp_rank, world_size, network_config, mode)
-        self.eps_ = network_config["rms_norm_eps"]
-        self.tp_q_head_num_ = network_config["num_attention_heads"] // self.world_size_
-        self.tp_k_head_num_ = network_config["num_key_value_heads"] // self.world_size_
-        self.tp_v_head_num_ = network_config["num_key_value_heads"] // self.world_size_
+    def __init__(self, layer_num, num_attention_heads, num_key_value_heads, head_dim):
+        super().__init__(layer_num, num_attention_heads, num_key_value_heads, head_dim)
+        self.tp_q_head_num_ = num_attention_heads
+        self.tp_k_head_num_ = num_key_value_heads
+        self.tp_v_head_num_ = num_key_value_heads
         self.tp_o_head_num_ = self.tp_q_head_num_
-        self.head_dim_ = network_config["hidden_size"] // network_config["num_attention_heads"]
-        self.embed_dim_ = network_config["hidden_size"]
         self._bind_func()
-        self.embedding = RotaryEmbedding(self.embed_dim_)
         return
     
     def _bind_func(self):
