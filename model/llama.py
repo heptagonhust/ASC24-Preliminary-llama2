@@ -26,8 +26,11 @@
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
+import os
+import json
 from torch import nn
 from transformers import LlamaConfig
+import torch.distributed as dist
 
 from model.model_metadata import InputMetadata
 from model.layers.activate import SiluAndMul
@@ -46,8 +49,14 @@ from model.parallel_utils.parallel_state import (
 from sampler.sampling_metadata import SamplingMetadata
 from model.weight_utils import (default_weight_loader,hf_model_weights_iterator)
 from sequence.sequence import SamplerOutput
-from model.infer_state_info import InferStateInfo
+from model.infer_state_info import InferStateInfo,LlamaInferStateInfo
 from model.layers.triton_kernel import destindex_copy_kv
+from parallel_utils.parallel_state import get_tensor_model_parallel_rank
+from utils.utils import repair_config,init_req_to_token_indexes
+from manager.memory_manager import MemoryManager
+from manager.request_manager import RequestManager
+from layers.triton_kernel.copy_kv_index_to_req import copy_kv_index_to_req
+
 
 KVCache = Tuple[torch.Tensor, torch.Tensor]
 
@@ -313,15 +322,171 @@ class LlamaForCausalLM(nn.Module):
     def __init__(
         self,
         config: LlamaConfig,
-        linear_method: Optional[LinearMethodBase] = None,
+        kvargs
+        # linear_method: Optional[LinearMethodBase] = None,
     ) -> None:
         super().__init__()
         self.config = config
-        self.linear_method = linear_method
-        self.model = LlamaModel(config, linear_method)
+        self.linear_method = None
+        self.model = LlamaModel(config, self.linear_method)
         self.lm_head = ParallelLMHead(config.vocab_size, config.hidden_size)
         self.sampler = Sampler(config.vocab_size)
+        self.tp_rank = get_tensor_model_parallel_rank()
+        self.world_size = dist.get_world_size()
+        self.weight_dir = kvargs["weight_dir"]
+        self.max_total_token_num = kvargs["max_total_token_num"]
+        self.max_req_num = kvargs.get("max_req_num",1000)
+        self.max_seq_length = kvargs.get("max_seq_length",1024 * 5)
+        self.return_all_prompt_logprobs = kvargs.get("return_all_prompt_logprobs",False)
 
+        self._init_config()
+        self._verify_must()
+        self._verify_params()
+        self._init_mem_manager()
+        self._init_req_manager()
+        self._init_some_value()
+        self._init_to_get_rotary()
+        
+    def _init_config(self):
+        with open(os.path.join(self.weight_dir_, "config.json"), 'r') as json_file:
+            self.config = json.load(json_file)
+        # rename keys
+        repair_config(self.config, same_names=["num_attention_heads", "n_head"])
+        repair_config(self.config, same_names=["hidden_size", "n_embd", "n_embed"])
+        repair_config(self.config, same_names=["num_hidden_layers", "n_layer"])
+        if "num_key_value_heads" not in self.config:
+            self.config["num_key_value_heads"] = self.config["num_attention_heads"]
+        return
+
+    def _verify_must(self):
+        assert self.config["num_attention_heads"] % self.world_size_ == 0
+        return
+    
+    def _verify_params(self):
+        assert self.config["num_key_value_heads"] % self.world_size_ == 0
+        return
+    
+    def _init_mem_manager(self):
+        self.mem_manager = MemoryManager(self.max_total_token_num,dtype=torch.float16,
+                                         head_num=self.config["num_key_value_heads"] // self.world_size,
+                                         head_dim=self.config["hidden_size"] // self.config["num_attention_heads"],
+                                         layer_num=self.config["num_hidden_layers"])
+        return
+    
+    def _init_req_manager(self):
+        self.req_manager = RequestManager(self.max_req_num,
+                                          self.max_seq_length,
+                                          self.mem_manager)
+        return
+    
+    def _init_some_value(self):
+        self.head_dim_ = self.config["n_embed"] // self.config["num_attention_heads"]
+        self.tp_k_head_num_ = self.config["num_key_value_heads"] // self.world_size_
+        self.tp_v_head_num_ = self.tp_k_head_num_
+        self.layers_num = self.config["n_layer"]
+        self.vocab_size = self.config["vocab_size"]
+        return
+    
+    def _init_to_get_rotary(self, default_base=10000):
+        if self.config.get("rope_scaling", {}) is None:
+            rope_scaling_factor = 1.0
+        else:
+            rope_scaling_factor = self.config.get("rope_scaling", {}).get("factor", 1.0)
+
+        base = self.config.get("rope_theta", float(default_base))
+
+        if "max_sequence_length" in self.config:
+            max_seq_len = self.config["max_sequence_length"]
+        else:
+            max_position_embeddings = self.config.get(
+                "max_position_embeddings",
+                2048 if base <= 10000.0 + 1e-5 else 16384
+            )
+            max_seq_len = max_position_embeddings * rope_scaling_factor
+            
+        inv_freq = 1.0 / (base ** (torch.arange(0, self.head_dim_, 2, device="cpu", dtype=torch.float32) / self.head_dim_))
+        t = torch.arange(max_seq_len + 1024 * 64, device="cpu", dtype=torch.float32) / rope_scaling_factor
+        freqs = torch.outer(t, inv_freq)
+
+        self._cos_cached = torch.cos(freqs).to(torch.float16).cuda()
+        self._sin_cached = torch.sin(freqs).to(torch.float16).cuda()
+        return
+    
+    def _prefill(self, batch_size, total_token_num, max_len_in_batch, input_ids, b_req_idx, b_start_loc, b_seq_len, multimodal_params):
+        infer_state = LlamaInferStateInfo()
+        infer_state.is_prefill = True
+        infer_state.return_all_prompt_logprobs = self.return_all_prompt_logprobs
+        infer_state.batch_size = batch_size
+        infer_state.total_token_num = total_token_num
+        infer_state.max_len_in_batch = max_len_in_batch
+        assert (input_ids.shape[0] == total_token_num)
+        assert (b_req_idx.shape[0] == b_start_loc.shape[0] == b_seq_len.shape[0])
+        infer_state.b_req_idx = b_req_idx
+        infer_state.b_start_loc = b_start_loc
+        infer_state.b_seq_len = b_seq_len
+        infer_state.multimodal_params = multimodal_params
+
+        infer_state.mem_manager = self.mem_manager
+        infer_state.req_manager = self.req_manager
+
+        alloc_mem = self.mem_manager.alloc_contiguous(infer_state.total_token_num)
+        if alloc_mem is not None:
+            infer_state.mem_is_contiguous = True
+            infer_state.mem_index = alloc_mem[0]
+            infer_state.mem_start = alloc_mem[1]
+            infer_state.mem_end = alloc_mem[2]
+
+        else:
+            infer_state.mem_is_contiguous = False
+            alloc_mem = self.mem_manager.alloc(infer_state.total_token_num)
+            infer_state.mem_index = alloc_mem
+            infer_state.key_buffer = torch.empty((infer_state.total_token_num, self.tp_k_head_num_, self.head_dim_), dtype=torch.float16, device="cuda")
+            infer_state.value_buffer = torch.empty((infer_state.total_token_num, self.tp_v_head_num_, self.head_dim_), dtype=torch.float16, device="cuda")
+        
+        init_req_to_token_indexes(self.req_manager.req_to_token_indexs, b_req_idx, b_seq_len,
+                            max_len_in_batch, infer_state.mem_index)
+
+        infer_state.init_some_extra_state(self, input_ids)
+        
+        # TODO(秦声鸿):加上context_forward接口
+        predict_logics = self._context_forward(input_ids, infer_state)
+        return predict_logics
+    
+    def _decode(self, batch_size, total_token_num, max_len_in_batch, input_ids, b_req_idx, b_start_loc, b_seq_len, multimodal_params):
+        infer_state = LlamaInferStateInfo()
+        infer_state.is_prefill = False
+        infer_state.batch_size = batch_size
+        infer_state.total_token_num = total_token_num
+        infer_state.max_len_in_batch = max_len_in_batch
+        assert (b_req_idx.shape[0] == b_start_loc.shape[0] == b_seq_len.shape[0])
+        infer_state.b_req_idx = b_req_idx
+        infer_state.b_start_loc = b_start_loc
+        infer_state.b_seq_len = b_seq_len
+        infer_state.multimodal_params = multimodal_params
+        
+        infer_state.mem_manager = self.mem_manager
+        infer_state.req_manager = self.req_manager
+
+        alloc_mem = self.mem_manager.alloc_contiguous(batch_size)
+        if alloc_mem is not None:
+            infer_state.mem_is_contiguous = True
+            infer_state.mem_index = alloc_mem[0]
+            infer_state.mem_start = alloc_mem[1]
+            infer_state.mem_end = alloc_mem[2]
+            copy_kv_index_to_req(self.req_manager.req_to_token_indexs, b_req_idx, b_seq_len, infer_state.mem_index)
+        else:
+            infer_state.mem_is_contiguous = False
+            alloc_mem = self.mem_manager.alloc(batch_size)
+            infer_state.mem_index = alloc_mem
+            infer_state.key_buffer = torch.empty((batch_size, self.tp_k_head_num_, self.head_dim_), dtype=torch.float16, device="cuda")
+            infer_state.value_buffer = torch.empty((batch_size, self.tp_v_head_num_, self.head_dim_), dtype=torch.float16, device="cuda")
+            copy_kv_index_to_req(self.req_manager.req_to_token_indexs, b_req_idx, b_seq_len, infer_state.mem_index)
+
+        infer_state.init_some_extra_state(self, input_ids)
+        # TODO(秦声鸿):加上token_forward接口
+        predict_logics = self._token_forward(input_ids, infer_state)
+        return predict_logics
+    
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -329,6 +494,7 @@ class LlamaForCausalLM(nn.Module):
         kv_caches: List[KVCache],
         input_metadata: InputMetadata,
     ) -> torch.Tensor:
+        # TODO(秦声鸿):加入context和token推理的判断逻辑
         hidden_states = self.model(input_ids, positions, kv_caches,
                                    input_metadata)
         return hidden_states
