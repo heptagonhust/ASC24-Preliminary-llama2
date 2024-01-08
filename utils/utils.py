@@ -66,3 +66,23 @@ def set_weight_attrs(
         assert not hasattr(
             weight, key), (f"Overwriting existing tensor attribute: {key}")
         setattr(weight, key, value)
+        
+def repair_config(config, same_names):
+    find_value = None
+    for name in same_names:
+        if name in config and config[name] is not None:
+            find_value = config[name]
+            break
+    for name in same_names:
+        config[name] = find_value
+    return
+
+def init_req_to_token_indexes(req_to_token_indexs, b_req_idx, b_seq_len, max_len_in_batch, alloc_mem_index):
+    start_index = 0
+    b_seq_len_numpy = b_seq_len.cpu().numpy()
+    b_req_idx_numpy = b_req_idx.cpu().numpy()
+    for i in range(len(b_seq_len)):
+        cur_seq_len = b_seq_len_numpy[i]
+        req_to_token_indexs[b_req_idx_numpy[i], 0:cur_seq_len] = alloc_mem_index[start_index:start_index + cur_seq_len]
+        start_index += cur_seq_len
+    return
