@@ -46,8 +46,8 @@ from model.parallel_utils.parallel_state import (
 from sampler.sampling_metadata import SamplingMetadata
 from model.weight_utils import (default_weight_loader,hf_model_weights_iterator)
 from sequence.sequence import SamplerOutput
-from infer_state_info import InferStateInfo
-from layers.triton_kernel import destindex_copy_kv
+from model.infer_state_info import InferStateInfo
+from model.layers.triton_kernel import destindex_copy_kv
 
 KVCache = Tuple[torch.Tensor, torch.Tensor]
 
