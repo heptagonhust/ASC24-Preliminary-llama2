@@ -46,6 +46,8 @@ from model.parallel_utils.parallel_state import (
 from sampler.sampling_metadata import SamplingMetadata
 from model.weight_utils import (default_weight_loader,hf_model_weights_iterator)
 from sequence.sequence import SamplerOutput
+from infer_state_info import InferStateInfo
+from layers.triton_kernel import destindex_copy_kv
 
 KVCache = Tuple[torch.Tensor, torch.Tensor]
 
@@ -147,6 +149,26 @@ class LlamaAttention(nn.Module):
                                    self.scaling,
                                    max_position_embeddings = max_position_embeddings,
                                    num_kv_heads=self.num_kv_heads)
+
+    def _pre_kv_cache(self,infer_state: InferStateInfo) -> Tuple[torch.Tensor, torch.Tensor]:
+        if infer_state.mem_is_contiguous:
+            cache_k = infer_state.mem_manager.key_buffer[self.layer_num_][infer_state.mem_start:infer_state.mem_end, :, :]
+            cache_v = infer_state.mem_manager.value_buffer[self.layer_num_][infer_state.mem_start:infer_state.mem_end, :, :]
+        else:
+            cache_k = infer_state.key_buffer
+            cache_v = infer_state.value_buffer 
+        return cache_k, cache_v
+        
+    def _post_cache_kv(self, cache_k, cache_v, infer_state:InferStateInfo):
+        mem_manager = infer_state.mem_manager
+        if not infer_state.mem_is_contiguous:
+            self._copy_kv_to_mem_cache(cache_k, cache_v, infer_state.mem_index, mem_manager)
+            return
+
+    def _copy_kv_to_mem_cache(self, key_buffer, value_buffer, mem_index, mem_manager):
+        destindex_copy_kv(key_buffer, mem_index, mem_manager.key_buffer[self.layer_num_])
+        destindex_copy_kv(value_buffer, mem_index, mem_manager.value_buffer[self.layer_num_])
+        return
 
     def forward(
         self,

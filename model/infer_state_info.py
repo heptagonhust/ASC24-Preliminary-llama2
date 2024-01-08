@@ -33,9 +33,6 @@ class InferStateInfo:
         self.multimodal_params = None
     
 
-    def init_some_extra_state(self, model, input_ids : torch.Tensor):
-        pass
-
 class LlamaInferStateInfo(InferStateInfo):
     def __init__(self):
         super().__init__()
