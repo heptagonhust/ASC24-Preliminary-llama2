@@ -93,7 +93,9 @@ class LLamaEngine():
             seq_token_ids = seq.get_token_ids()
             seq_token_ids = torch.tensor(seq_token_ids, dtype=torch.long, device=self.device)
             # TODO:修改传入参数
-            hidden_state = self.model(batch_size,total_token_num,input_len,seq_token_ids,position,b_req_idx,b_start_loc,b_seq_len,False,None)
+            hidden_state = self.model(batch_size, total_token_num, input_len,
+                                      seq_token_ids, position, b_req_idx,
+                                      b_start_loc, b_seq_len, False, None)
             # hidden_state = self.model(seq_token_ids, position, None, None)
             sample_output = self.model.sample(hidden_state, sampling_metadata)
             new_token_id = sample_output[-1].samples[-1].output_token

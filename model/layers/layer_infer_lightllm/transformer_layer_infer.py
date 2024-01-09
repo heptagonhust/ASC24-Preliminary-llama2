@@ -9,18 +9,21 @@ from model.layers.triton_kernel.context_flashattention_nopad import context_atte
 from model.layers.triton_kernel.rotary_emb import rotary_emb_fwd
 from model.layers.embedding import RotaryEmbedding
 from functools import partial
+import torch.nn as nn
 
-class BaseLayerInfer:
+class BaseLayerInfer(nn.Module):
 
     def __init__(self) -> None:
         pass
 
-    def context_forward(self, input_ids, infer_state: InferStateInfo):
+    def context_forward(self, q, k, v, infer_state: InferStateInfo):
         raise Exception("need to impl")
 
-    def token_forward(self, input_ids, infer_state: InferStateInfo):
+    def token_forward(self, q, k, v, infer_state: InferStateInfo):
         raise Exception("need to impl")
     
+    def forward(self, q, k, v, infer_state: InferStateInfo):
+        raise Exception("need to impl")
 
 class TransformerLayerInfer(BaseLayerInfer):
     """
@@ -95,12 +98,20 @@ class TransformerLayerInferTpl(TransformerLayerInfer):
         return o
     
     def context_forward(self, q, k, v, infer_state: InferStateInfo):
-        self._context_attention(q, k, v, infer_state)
-        return None
+        o = self._context_attention(q, k, v, infer_state)
+        return o
 
     def token_forward(self, q, k, v, infer_state: InferStateInfo):
-        self._token_attention(q, k, v, infer_state)
-        return None
+        o = self._token_attention(q, k, v, infer_state)
+        return o
+    
+    def forward(self, q, k, v, infer_state: InferStateInfo):
+        o = None
+        if infer_state.is_prefill:
+            o = self.context_forward(q, k, v, infer_state)
+        else:
+            o = self.token_forward(q, k, v, infer_state)
+        return o
     
 
 

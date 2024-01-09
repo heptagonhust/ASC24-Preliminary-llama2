@@ -47,15 +47,16 @@ from model.layers.vocab_parallel_embedding import (
 from model.parallel_utils.parallel_state import (
     get_tensor_model_parallel_world_size)
 from sampler.sampling_metadata import SamplingMetadata
-from model.weight_utils import (default_weight_loader,hf_model_weights_iterator)
+from model.weight_utils import (default_weight_loader, hf_model_weights_iterator)
 from sequence.sequence import SamplerOutput
-from model.infer_state_info import InferStateInfo,LlamaInferStateInfo
+from model.infer_state_info import InferStateInfo, LlamaInferStateInfo
+from model.layers.layer_infer_lightllm.transformer_layer_infer import LlamaTransformerLayerInfer
 from model.layers.triton_kernel import destindex_copy_kv
 from parallel_utils.parallel_state import get_tensor_model_parallel_rank
 from utils.utils import repair_config,init_req_to_token_indexes
 from manager.memory_manager import MemoryManager
 from manager.request_manager import RequestManager
-from layers.triton_kernel.copy_kv_index_to_req import copy_kv_index_to_req
+from model.layers.triton_kernel.copy_kv_index_to_req import copy_kv_index_to_req
 
 
 KVCache = Tuple[torch.Tensor, torch.Tensor]
@@ -96,6 +97,7 @@ class LlamaAttention(nn.Module):
 
     def __init__(
         self,
+        layer_num: int,
         hidden_size: int,
         num_heads: int,
         num_kv_heads: int,
@@ -105,6 +107,7 @@ class LlamaAttention(nn.Module):
         linear_method: Optional[LinearMethodBase] = None,
     ) -> None:
         super().__init__()
+        self.layer_num = layer_num
         self.hidden_size = hidden_size
         tp_size = get_tensor_model_parallel_world_size()
         self.total_num_heads = num_heads
@@ -153,46 +156,25 @@ class LlamaAttention(nn.Module):
             base=rope_theta,
         )
 
-        self.attn = GroupAttention(self.num_heads,
-                                   self.head_dim,
-                                   self.scaling,
-                                   max_position_embeddings = max_position_embeddings,
-                                   num_kv_heads=self.num_kv_heads)
-
-    def _pre_kv_cache(self,infer_state: InferStateInfo) -> Tuple[torch.Tensor, torch.Tensor]:
-        if infer_state.mem_is_contiguous:
-            cache_k = infer_state.mem_manager.key_buffer[self.layer_num_][infer_state.mem_start:infer_state.mem_end, :, :]
-            cache_v = infer_state.mem_manager.value_buffer[self.layer_num_][infer_state.mem_start:infer_state.mem_end, :, :]
-        else:
-            cache_k = infer_state.key_buffer
-            cache_v = infer_state.value_buffer 
-        return cache_k, cache_v
-        
-    def _post_cache_kv(self, cache_k, cache_v, infer_state:InferStateInfo):
-        mem_manager = infer_state.mem_manager
-        if not infer_state.mem_is_contiguous:
-            self._copy_kv_to_mem_cache(cache_k, cache_v, infer_state.mem_index, mem_manager)
-            return
-
-    def _copy_kv_to_mem_cache(self, key_buffer, value_buffer, mem_index, mem_manager):
-        destindex_copy_kv(key_buffer, mem_index, mem_manager.key_buffer[self.layer_num_])
-        destindex_copy_kv(value_buffer, mem_index, mem_manager.value_buffer[self.layer_num_])
-        return
+        self.attn = LlamaTransformerLayerInfer(
+            self.layer_num,
+            self.num_heads,
+            self.num_kv_heads,
+            self.head_dim
+        )
 
     def forward(
         self,
         positions: torch.Tensor,
         hidden_states: torch.Tensor,
-        kv_cache: KVCache,
-        input_metadata: InputMetadata,
+        infer_state: LlamaInferStateInfo,
     ) -> torch.Tensor:
         """Attention Layer forward pass.
 
         Args:
             positions: shape = [batch_size, seq_len]
             hidden_states: shape = [batch_size, seq_len, hidden_size]
-            kv_cache (KVCache): Tuple[k_cache, v_cache]
-            input_metadata (InputMetadata): 
+            infer_state: LlamaInferStateInfo 
 
         Returns:
             torch.Tensor: _description_
@@ -204,10 +186,7 @@ class LlamaAttention(nn.Module):
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         #! rotary embedding encoding for key & value
         q, k = self.rotary_emb(positions, q, k)
-        # k_cache, v_cache = kv_cache
-        k_cache = None
-        v_cache = None
-        attn_output = self.attn(q, k, v, k_cache, v_cache, input_metadata)
+        attn_output = self.attn(q, k, v, infer_state)
         output = self.o_proj(attn_output)
         return output
 
@@ -217,6 +196,7 @@ class LlamaDecoderLayer(nn.Module):
     def __init__(
         self,
         config: LlamaConfig,
+        layer_num: int,
         linear_method: Optional[LinearMethodBase] = None,
     ) -> None:
         super().__init__()
@@ -227,6 +207,7 @@ class LlamaDecoderLayer(nn.Module):
                                           8192)
         # TODO:接入layer_infer_lightllm中attention模块
         self.self_attn = LlamaAttention(
+            layer_num=layer_num,
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
             num_kv_heads=config.num_key_value_heads,
@@ -254,7 +235,6 @@ class LlamaDecoderLayer(nn.Module):
         input_metadata: InputMetadata,
         residual: Optional[torch.Tensor],
         infer_state: LlamaInferStateInfo,
-        is_prefill: bool
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Self Attention
         if residual is None:
@@ -263,12 +243,11 @@ class LlamaDecoderLayer(nn.Module):
         else:
             hidden_states, residual = self.input_layernorm(
                 hidden_states, residual)
-        # TODO:增加infer_state和is_prefill字段
+            
         hidden_states = self.self_attn(
             positions=positions,
             hidden_states=hidden_states,
-            kv_cache=kv_cache,
-            input_metadata=input_metadata,
+            infer_state=infer_state
         )
 
         # Fully Connected
@@ -294,8 +273,8 @@ class LlamaModel(nn.Module):
             config.hidden_size,
         )
         self.layers = nn.ModuleList([
-            LlamaDecoderLayer(config, linear_method)
-            for _ in range(config.num_hidden_layers)
+            LlamaDecoderLayer(config, i, linear_method)
+            for i in range(config.num_hidden_layers)
         ])
         self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -305,7 +284,6 @@ class LlamaModel(nn.Module):
         positions: torch.Tensor,
         infer_state: LlamaInferStateInfo,
         input_metadata: InputMetadata,
-        is_prefill: bool
     ) -> torch.Tensor:
         hidden_states = self.embed_tokens(input_ids)
         residual = None
@@ -318,7 +296,6 @@ class LlamaModel(nn.Module):
                 input_metadata,
                 residual,
                 infer_state,
-                is_prefill
             )
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
@@ -420,7 +397,10 @@ class LlamaForCausalLM(nn.Module):
         self._sin_cached = torch.sin(freqs).to(torch.float16).cuda()
         return
     
-    def _prefill(self, batch_size, total_token_num, max_len_in_batch, input_ids, b_req_idx, b_start_loc, b_seq_len, multimodal_params,positions,input_metadata):
+    def _prefill(self, batch_size, total_token_num,
+                 max_len_in_batch, input_ids,
+                 b_req_idx, b_start_loc, b_seq_len,
+                 multimodal_params, positions, input_metadata):
         infer_state = LlamaInferStateInfo()
         infer_state.is_prefill = True
         infer_state.return_all_prompt_logprobs = self.return_all_prompt_logprobs
@@ -456,7 +436,7 @@ class LlamaForCausalLM(nn.Module):
 
         infer_state.init_some_extra_state(self, input_ids)
         
-        hidden_states = self.model(input_ids,positions,infer_state,input_metadata,is_prefill = True)
+        hidden_states = self.model(input_ids,positions,infer_state,input_metadata)
         return hidden_states
     
     def _decode(self, batch_size, total_token_num, max_len_in_batch, input_ids, b_req_idx, b_start_loc, b_seq_len, multimodal_params,positions,input_metadata):
@@ -491,7 +471,7 @@ class LlamaForCausalLM(nn.Module):
 
         infer_state.init_some_extra_state(self, input_ids)
         # hidden_state = self._token_forward(input_ids, infer_state)
-        hidden_states = self.model(input_ids,positions,infer_state,input_metadata,is_prefill = False)
+        hidden_states = self.model(input_ids, positions, infer_state, input_metadata)
         
         return hidden_states
     
