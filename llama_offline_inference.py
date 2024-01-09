@@ -5,8 +5,8 @@ import json
 
 
 if __name__ == "__main__":
-    model_config_llama = ModelConfig("/data_local/70B-hf", "/data_local/70B-hf", True, 1, None)
-    parallel_config_llama = ParallelConfig(pipeline_parallel_size = 1, tensor_parallel_size = 4)
+    model_config_llama = ModelConfig("/data_local/13B-hf", "/data_local/13B-hf", True, 1, None)
+    parallel_config_llama = ParallelConfig(pipeline_parallel_size = 2, tensor_parallel_size = 2)
     LLama = LLamaEngine(model_config_llama,parallel_config_llama)
     with open('./scrambled_sampled_dataset.json') as f:
         requests = json.load(f)

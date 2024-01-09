@@ -5,12 +5,16 @@ from model.llama import LlamaForCausalLM
 from sequence.sequence import Sequence
 import torch.distributed as dist
 import numpy as np
+from model.parallel_utils.parallel_state import  (get_pipeline_model_parallel_rank, get_pipeline_model_parallel_world_size,
+                                                  get_pipeline_model_parallel_first_rank,get_pipeline_model_parallel_last_rank,
+                                                  receive_from_last_pp_rank)
 
 from transformers import AutoTokenizer
 from typing import List, Tuple
 from tqdm import tqdm
 import torch.nn as nn
 import torch
+import torch.distributed
 import contextlib
 import random
 
@@ -52,31 +56,46 @@ class LLamaEngine():
         for i in tqdm(range(len(requests))):
             prompt, prompt_len, output_len = requests[i] 
             output = self.run_seq(prompt, i, output_len, sampling_params)
-            if dist.get_rank() == 0:
+            # pp_rank = get_pipeline_model_parallel_rank()
+            # pp_size = get_pipeline_model_parallel_world_size()
+            if dist.get_rank() == 3 : 
                 print(f'input: {prompt}\ninput_len: {prompt_len}\n')
                 print(f'output: {output}\noutput_len: {len(output)}\n\n')
+            torch.distributed.barrier()
 
     def run_seq(self, request, request_id, max_output_len, 
                 sampling_params: SamplingParams = None):
+        pp_rank = get_pipeline_model_parallel_rank()
+        pp_size = get_pipeline_model_parallel_world_size()
         input_id = self.tokenizer.encode(request)
         seq = Sequence(request_id, request, input_id, block_size=0)   
 
-        for _ in range(max_output_len):
-            sampling_metadata = _prepare_sample(seq, sampling_params)
 
+        for i in range(max_output_len):
+            if pp_rank == 0:
+                if i != 0:
+                    position = torch.arange(0, seq.get_len())
+                    shape = [*position.shape, self.model_config.hf_model_config.hidden_size]
+                    hidden_state = receive_from_last_pp_rank(shape, self.model_config.dtype) # 从最后一个节点取回hidden_state
+                    sample_output = self.model.sample(hidden_state, sampling_metadata)
+                    new_token_id = sample_output[-1].samples[-1].output_token
+                    tokens_logprob = sample_output[-1].samples[-1].logprobs
+                    seq.append_token_id(new_token_id, tokens_logprob)
+                    # if (seq.get_last_token_id() == self.tokenizer.eos_token_id):
+                    #     break
+                    
+            sampling_metadata = _prepare_sample(seq, sampling_params)
             position = torch.arange(0, seq.get_len())
             seq_token_ids = seq.get_token_ids()
             seq_token_ids = torch.tensor(seq_token_ids, dtype=torch.long, device=self.device)
             hidden_state = self.model(seq_token_ids, position, None, None)
-            sample_output = self.model.sample(hidden_state, sampling_metadata)
-            new_token_id = sample_output[-1].samples[-1].output_token
-            tokens_logprob = sample_output[-1].samples[-1].logprobs
-            seq.append_token_id(new_token_id, tokens_logprob)
+            if pp_rank == pp_size - 1 : 
+                dist.send(hidden_state, dst=get_pipeline_model_parallel_first_rank())  # 在最后一个节点的时候将hidden_state发送给第一个节点
 
-            if (seq.get_last_token_id() == self.tokenizer.eos_token_id):
-                break
-
-        output_token_ids = seq.get_output_token_ids()
-        output = self.tokenizer.decode(output_token_ids, skip_special_tokens=True)
-        return output
+        if pp_rank == pp_size - 1 : 
+            output_token_ids = seq.get_output_token_ids()
+            output = self.tokenizer.decode(output_token_ids, skip_special_tokens=True)
+            return output
+        # else:
+        #     return None
 

@@ -25,6 +25,7 @@
 """Inference-only LLaMA model compatible with HuggingFace weights."""
 from typing import Any, Dict, List, Optional, Tuple
 
+import re
 import torch
 from torch import nn
 from transformers import LlamaConfig
@@ -42,7 +43,10 @@ from sampler.sampler import Sampler
 from model.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding, ParallelLMHead)
 from model.parallel_utils.parallel_state import (
-    get_tensor_model_parallel_world_size)
+    get_tensor_model_parallel_world_size, get_pipeline_model_parallel_rank,
+    get_pipeline_model_parallel_world_size)
+from model.parallel_utils.parallel_state import (
+    send_to_next_pp_rank, receive_from_prev_pp_rank)
 from sampler.sampling_metadata import SamplingMetadata
 from model.weight_utils import (default_weight_loader,hf_model_weights_iterator)
 from sequence.sequence import SamplerOutput
@@ -254,15 +258,21 @@ class LlamaModel(nn.Module):
         self.config = config
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.embed_tokens = VocabParallelEmbedding(
-            config.vocab_size,
-            config.hidden_size,
-        )
+        
+        self.pp_size = get_pipeline_model_parallel_world_size()
+        self.pp_rank = get_pipeline_model_parallel_rank()
+        if self.pp_rank == 0:
+            self.embed_tokens = VocabParallelEmbedding(
+                config.vocab_size,
+                config.hidden_size,
+            )
         self.layers = nn.ModuleList([
             LlamaDecoderLayer(config, linear_method)
-            for _ in range(config.num_hidden_layers)
+            for _ in range(config.num_hidden_layers//self.pp_size + (
+                self.pp_rank < config.num_hidden_layers % self.pp_size))
         ])
-        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        if self.pp_rank == self.pp_size - 1:
+            self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -271,7 +281,7 @@ class LlamaModel(nn.Module):
         kv_caches: List[KVCache],
         input_metadata: InputMetadata,
     ) -> torch.Tensor:
-        hidden_states = self.embed_tokens(input_ids)
+        hidden_states = self.embed_tokens(input_ids) if self.pp_rank == 0 else input_ids
         residual = None
         for i in range(len(self.layers)):
             layer = self.layers[i]
@@ -282,7 +292,10 @@ class LlamaModel(nn.Module):
                 input_metadata,
                 residual,
             )
-        hidden_states, _ = self.norm(hidden_states, residual)
+        if self.pp_rank == self.pp_size - 1:
+            hidden_states, _ = self.norm(hidden_states, residual)
+        else:
+            hidden_states += residual
         return hidden_states
 
 
@@ -297,8 +310,12 @@ class LlamaForCausalLM(nn.Module):
         self.config = config
         self.linear_method = linear_method
         self.model = LlamaModel(config, linear_method)
-        self.lm_head = ParallelLMHead(config.vocab_size, config.hidden_size)
-        self.sampler = Sampler(config.vocab_size)
+        self.dtype  = torch.get_default_dtype()
+        self.pp_size = get_pipeline_model_parallel_world_size()
+        self.pp_rank = get_pipeline_model_parallel_rank()
+        if self.pp_rank == self.pp_size - 1:
+            self.lm_head = ParallelLMHead(config.vocab_size, config.hidden_size)
+            self.sampler = Sampler(config.vocab_size)
 
     def forward(
         self,
@@ -306,19 +323,33 @@ class LlamaForCausalLM(nn.Module):
         positions: torch.Tensor,
         kv_caches: List[KVCache],
         input_metadata: InputMetadata,
-    ) -> torch.Tensor:
-        hidden_states = self.model(input_ids, positions, kv_caches,
+    ) -> Optional[torch.Tensor]:
+        if self.pp_rank == 0:
+            input_ = input_ids
+        else:
+            shape = [*positions.shape, self.config.hidden_size]
+            input_ = receive_from_prev_pp_rank(shape, self.dtype)
+        hidden_states = self.model(input_, positions, kv_caches,
                                    input_metadata)
-        return hidden_states
+        if self.pp_rank == self.pp_size - 1:
+            # next_tokens = self.sampler(self.lm_head.weight, hidden_states,
+            #                            input_metadata)
+            return hidden_states
+        else:
+            send_to_next_pp_rank(hidden_states)
+            return None
 
     def sample(
         self,
         hidden_states: torch.Tensor,
         sampling_metadata: SamplingMetadata,
     ) -> SamplerOutput:
-        next_tokens = self.sampler(self.lm_head.weight, hidden_states,
-                                   sampling_metadata)
-        return next_tokens
+        if self.pp_rank == self.pp_size - 1:
+            next_tokens = self.sampler(self.lm_head.weight, hidden_states,
+                                    sampling_metadata)
+            return next_tokens
+        else:
+            return None
 
     def load_weights(self,
                      model_name_or_path: str,
@@ -334,8 +365,25 @@ class LlamaForCausalLM(nn.Module):
             ("gate_up_proj", "up_proj", 1),
         ]
         params_dict = dict(self.named_parameters())
+        
+        num_layers_per_pp_rank = self.config.num_hidden_layers // self.pp_size
+        layer_id_begin = (
+            self.pp_rank * num_layers_per_pp_rank +
+            min(self.pp_rank, self.config.num_hidden_layers % self.pp_size))
+        layer_id_end = ((self.pp_rank + 1) * num_layers_per_pp_rank + min(
+            self.pp_rank + 1, self.config.num_hidden_layers % self.pp_size))
+        
         for name, loaded_weight in hf_model_weights_iterator(
                 model_name_or_path, cache_dir, load_format, revision):
+            # Map the layer id to the current pipeline stage.
+            numbers = re.findall(r"\d+", name)
+            if len(numbers) > 0:
+                number = int(numbers[0])
+                if number < layer_id_begin or number >= layer_id_end:
+                    continue
+                new_number = number - layer_id_begin
+                name = re.sub(str(number), str(new_number), name)
+                
             if "rotary_emb.inv_freq" in name:
                 continue
             if ("rotary_emb.cos_cached" in name
@@ -356,8 +404,10 @@ class LlamaForCausalLM(nn.Module):
                 break
             else:
                 # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
+                if name not in params_dict:
                     continue
+                # if name.endswith(".bias") and name not in params_dict:
+                #     continue
                 param = params_dict[name]
                 weight_loader = getattr(param, "weight_loader",
                                         default_weight_loader)

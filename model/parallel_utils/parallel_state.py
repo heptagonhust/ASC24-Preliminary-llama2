@@ -11,7 +11,7 @@ import random
 import numpy as np
 import subprocess
 from model.model_metadata import ParallelConfig, ModelConfig
-from typing import Optional
+from typing import List, Optional, Union
 # Tensor model parallel group that the current rank belongs to.
 _TENSOR_MODEL_PARALLEL_GROUP = None
 # Pipeline model parallel group that the current rank belongs to.
@@ -77,14 +77,14 @@ def initialize_model_parallel(
     world_size: int = dist.get_world_size()
 
     if (world_size !=
-            tensor_model_parallel_size * pipeline_model_parallel_size):  # 2 * 3
+            tensor_model_parallel_size * pipeline_model_parallel_size):  # 2 * 2
         raise RuntimeError(
             f"world_size ({world_size}) is not equal to "
             f"tensor_model_parallel_size ({tensor_model_parallel_size}) x "
             f"pipeline_model_parallel_size ({pipeline_model_parallel_size})")
 
     num_tensor_model_parallel_groups: int = (world_size //
-                                             tensor_model_parallel_size)  # 3
+                                             tensor_model_parallel_size)  # 2
     num_pipeline_model_parallel_groups: int = (world_size //
                                                pipeline_model_parallel_size)  # 2
     rank = dist.get_rank()
@@ -93,9 +93,9 @@ def initialize_model_parallel(
     global _TENSOR_MODEL_PARALLEL_GROUP
     assert _TENSOR_MODEL_PARALLEL_GROUP is None, (
         "tensor model parallel group is already initialized")
-    for i in range(num_tensor_model_parallel_groups):  # 3
+    for i in range(num_tensor_model_parallel_groups):  # 2
         ranks = range(i * tensor_model_parallel_size,
-                      (i + 1) * tensor_model_parallel_size)  # (0,1) (2,3) (4,5)
+                      (i + 1) * tensor_model_parallel_size)  # (0,1) (2,3)
         group = dist.new_group(ranks)  # 划分了三个group
         if rank in ranks:
             _TENSOR_MODEL_PARALLEL_GROUP = group
@@ -106,7 +106,7 @@ def initialize_model_parallel(
     assert _PIPELINE_MODEL_PARALLEL_GROUP is None, (
         "pipeline model parallel group is already initialized")
     for i in range(num_pipeline_model_parallel_groups):  # 2
-        ranks = range(i, world_size, num_pipeline_model_parallel_groups)  # (0,2,4) (1,3,5)
+        ranks = range(i, world_size, num_pipeline_model_parallel_groups)  # (0,2) (1,3)
         group = dist.new_group(ranks)  # 划分了两个group
         if rank in ranks:
             _PIPELINE_MODEL_PARALLEL_GROUP = group
@@ -207,3 +207,30 @@ def destroy_model_parallel():
     _PIPELINE_MODEL_PARALLEL_GROUP = None
     global _PIPELINE_GLOBAL_RANKS
     _PIPELINE_GLOBAL_RANKS = None
+    
+
+def send_to_next_pp_rank(tensor: torch.Tensor) -> None:
+    dist.send(tensor, get_pipeline_model_parallel_next_rank())
+
+
+Shape = Union[List[int], torch.Size]
+def receive_from_prev_pp_rank(
+    tensor_shape: Shape,
+    tensor_dtype: torch.dtype,
+    tensor: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
+    if tensor is None:
+        tensor = torch.empty(tensor_shape, dtype=tensor_dtype, device='cuda')
+    dist.recv(tensor, get_pipeline_model_parallel_prev_rank())
+    return tensor
+
+def receive_from_last_pp_rank(
+    tensor_shape: Shape,
+    tensor_dtype: torch.dtype,
+    tensor: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
+    if tensor is None:
+        tensor = torch.empty(tensor_shape, dtype=tensor_dtype, device='cuda')
+    dist.recv(tensor, get_pipeline_model_parallel_last_rank())
+    return tensor
+
