@@ -52,7 +52,7 @@ from sequence.sequence import SamplerOutput
 from model.infer_state_info import InferStateInfo, LlamaInferStateInfo
 from model.layers.layer_infer_lightllm.transformer_layer_infer import LlamaTransformerLayerInfer
 from model.layers.triton_kernel import destindex_copy_kv
-from parallel_utils.parallel_state import get_tensor_model_parallel_rank
+from model.parallel_utils.parallel_state import get_tensor_model_parallel_rank
 from utils.utils import repair_config,init_req_to_token_indexes
 from manager.memory_manager import MemoryManager
 from manager.request_manager import RequestManager
@@ -186,7 +186,7 @@ class LlamaAttention(nn.Module):
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         #! rotary embedding encoding for key & value
         q, k = self.rotary_emb(positions, q, k)
-        attn_output = self.attn(q, k, v, infer_state)
+        attn_output = self.attn.forward(q, k, v, infer_state)
         output = self.o_proj(attn_output)
         return output
 
@@ -236,6 +236,7 @@ class LlamaDecoderLayer(nn.Module):
         residual: Optional[torch.Tensor],
         infer_state: LlamaInferStateInfo,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        print("LlamaDecoderLayer forwarding")
         # Self Attention
         if residual is None:
             residual = hidden_states
@@ -285,6 +286,9 @@ class LlamaModel(nn.Module):
         infer_state: LlamaInferStateInfo,
         input_metadata: InputMetadata,
     ) -> torch.Tensor:
+        
+        print("LlamaModel forwarding")
+
         hidden_states = self.embed_tokens(input_ids)
         residual = None
         for i in range(len(self.layers)):
@@ -333,7 +337,7 @@ class LlamaForCausalLM(nn.Module):
         self._init_to_get_rotary()
         
     def _init_config(self):
-        with open(os.path.join(self.weight_dir_, "config.json"), 'r') as json_file:
+        with open(os.path.join(self.weight_dir, "config.json"), 'r') as json_file:
             self.config = json.load(json_file)
         # rename keys
         repair_config(self.config, same_names=["num_attention_heads", "n_head"])
@@ -344,11 +348,11 @@ class LlamaForCausalLM(nn.Module):
         return
 
     def _verify_must(self):
-        assert self.config["num_attention_heads"] % self.world_size_ == 0
+        assert self.config["num_attention_heads"] % self.world_size == 0
         return
     
     def _verify_params(self):
-        assert self.config["num_key_value_heads"] % self.world_size_ == 0
+        assert self.config["num_key_value_heads"] % self.world_size == 0
         return
     
     def _init_mem_manager(self):
@@ -366,7 +370,7 @@ class LlamaForCausalLM(nn.Module):
     
     def _init_some_value(self):
         self.head_dim_ = self.config["n_embed"] // self.config["num_attention_heads"]
-        self.tp_k_head_num_ = self.config["num_key_value_heads"] // self.world_size_
+        self.tp_k_head_num_ = self.config["num_key_value_heads"] // self.world_size
         self.tp_v_head_num_ = self.tp_k_head_num_
         self.layers_num = self.config["n_layer"]
         self.vocab_size = self.config["vocab_size"]
@@ -490,6 +494,8 @@ class LlamaForCausalLM(nn.Module):
         input_metadata: InputMetadata,
     )    -> torch.Tensor:
         
+        print("LlamaForCausalLM forwarding")
+
         if is_prefill:
             return self._prefill(
                 batch_size=batch_size,

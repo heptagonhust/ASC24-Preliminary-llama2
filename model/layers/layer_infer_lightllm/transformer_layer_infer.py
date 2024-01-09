@@ -14,7 +14,7 @@ import torch.nn as nn
 class BaseLayerInfer(nn.Module):
 
     def __init__(self) -> None:
-        pass
+        super().__init__()
 
     def context_forward(self, q, k, v, infer_state: InferStateInfo):
         raise Exception("need to impl")
@@ -29,6 +29,7 @@ class TransformerLayerInfer(BaseLayerInfer):
     """
     """
     def __init__(self, layer_num, num_attention_heads, num_key_value_heads, head_dim):
+        super().__init__()
         self.layer_num_ = layer_num
         self.num_attention_heads_ = num_attention_heads
         self.head_dim_ = head_dim
