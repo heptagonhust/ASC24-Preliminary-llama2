@@ -322,7 +322,7 @@ class LlamaForCausalLM(nn.Module):
     def __init__(
         self,
         config: LlamaConfig,
-        kvargs
+        **kwargs
         # linear_method: Optional[LinearMethodBase] = None,
     ) -> None:
         super().__init__()
@@ -333,11 +333,12 @@ class LlamaForCausalLM(nn.Module):
         self.sampler = Sampler(config.vocab_size)
         self.tp_rank = get_tensor_model_parallel_rank()
         self.world_size = dist.get_world_size()
-        self.weight_dir = kvargs["weight_dir"]
-        self.max_total_token_num = kvargs["max_total_token_num"]
-        self.max_req_num = kvargs.get("max_req_num",1000)
-        self.max_seq_length = kvargs.get("max_seq_length",1024 * 5)
-        self.return_all_prompt_logprobs = kvargs.get("return_all_prompt_logprobs",False)
+        # Use the kwargs
+        self.weight_dir = kwargs.get("weight_dir")
+        self.max_total_token_num = kwargs.get("max_total_token_num")
+        self.max_req_num = kwargs.get("max_req_num", 1000)
+        self.max_seq_length = kwargs.get("max_seq_length", 1024 * 5)
+        self.return_all_prompt_logprobs = kwargs.get("return_all_prompt_logprobs", False)
 
         self._init_config()
         self._verify_must()

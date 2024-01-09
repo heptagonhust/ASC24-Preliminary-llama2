@@ -35,7 +35,12 @@ class LLamaEngine():
         
         setup_distributed(parallel_config_llama)
         with _set_default_torch_dtype(model_config.dtype):
-            model = LlamaForCausalLM(model_config.hf_model_config)  
+            model = LlamaForCausalLM(
+                model_config.hf_model_config,
+                weight_dir="/data/70B-hf",
+                max_total_token_num=model_config.max_model_len,
+                max_req_num=1
+                                     )  
             model.to(device=device)
             # Load the weights from the cached or downloaded files.
             model.load_weights(model_config.model)
