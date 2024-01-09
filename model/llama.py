@@ -225,6 +225,7 @@ class LlamaDecoderLayer(nn.Module):
         rope_scaling = getattr(config, "rope_scaling", None)
         max_position_embeddings = getattr(config, "max_position_embeddings",
                                           8192)
+        # TODO:接入layer_infer_lightllm中attention模块
         self.self_attn = LlamaAttention(
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
@@ -252,6 +253,8 @@ class LlamaDecoderLayer(nn.Module):
         kv_cache: KVCache,
         input_metadata: InputMetadata,
         residual: Optional[torch.Tensor],
+        infer_state: LlamaInferStateInfo,
+        is_prefill: bool
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Self Attention
         if residual is None:
@@ -260,6 +263,7 @@ class LlamaDecoderLayer(nn.Module):
         else:
             hidden_states, residual = self.input_layernorm(
                 hidden_states, residual)
+        # TODO:增加infer_state和is_prefill字段
         hidden_states = self.self_attn(
             positions=positions,
             hidden_states=hidden_states,
@@ -299,8 +303,9 @@ class LlamaModel(nn.Module):
         self,
         input_ids: torch.Tensor,
         positions: torch.Tensor,
-        kv_caches: List[KVCache],
+        infer_state: LlamaInferStateInfo,
         input_metadata: InputMetadata,
+        is_prefill: bool
     ) -> torch.Tensor:
         hidden_states = self.embed_tokens(input_ids)
         residual = None
@@ -312,6 +317,8 @@ class LlamaModel(nn.Module):
                 None,
                 input_metadata,
                 residual,
+                infer_state,
+                is_prefill
             )
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
@@ -413,7 +420,7 @@ class LlamaForCausalLM(nn.Module):
         self._sin_cached = torch.sin(freqs).to(torch.float16).cuda()
         return
     
-    def _prefill(self, batch_size, total_token_num, max_len_in_batch, input_ids, b_req_idx, b_start_loc, b_seq_len, multimodal_params):
+    def _prefill(self, batch_size, total_token_num, max_len_in_batch, input_ids, b_req_idx, b_start_loc, b_seq_len, multimodal_params,positions,input_metadata):
         infer_state = LlamaInferStateInfo()
         infer_state.is_prefill = True
         infer_state.return_all_prompt_logprobs = self.return_all_prompt_logprobs
@@ -449,11 +456,10 @@ class LlamaForCausalLM(nn.Module):
 
         infer_state.init_some_extra_state(self, input_ids)
         
-        # TODO(秦声鸿):加上context_forward接口
-        predict_logics = self._context_forward(input_ids, infer_state)
-        return predict_logics
+        hidden_states = self.model(input_ids,positions,infer_state,input_metadata,is_prefill = True)
+        return hidden_states
     
-    def _decode(self, batch_size, total_token_num, max_len_in_batch, input_ids, b_req_idx, b_start_loc, b_seq_len, multimodal_params):
+    def _decode(self, batch_size, total_token_num, max_len_in_batch, input_ids, b_req_idx, b_start_loc, b_seq_len, multimodal_params,positions,input_metadata):
         infer_state = LlamaInferStateInfo()
         infer_state.is_prefill = False
         infer_state.batch_size = batch_size
@@ -484,21 +490,56 @@ class LlamaForCausalLM(nn.Module):
             copy_kv_index_to_req(self.req_manager.req_to_token_indexs, b_req_idx, b_seq_len, infer_state.mem_index)
 
         infer_state.init_some_extra_state(self, input_ids)
-        # TODO(秦声鸿):加上token_forward接口
-        predict_logics = self._token_forward(input_ids, infer_state)
-        return predict_logics
+        # hidden_state = self._token_forward(input_ids, infer_state)
+        hidden_states = self.model(input_ids,positions,infer_state,input_metadata,is_prefill = False)
+        
+        return hidden_states
     
     def forward(
         self,
+        batch_size,
+        total_token_num,
+        max_len_in_batch,
         input_ids: torch.Tensor,
         positions: torch.Tensor,
-        kv_caches: List[KVCache],
+        b_req_idx: torch.Tensor,
+        b_start_loc: torch.Tensor,
+        b_seq_len: torch.Tensor,
+        is_prefill: bool,
+        # kv_caches: List[KVCache],
         input_metadata: InputMetadata,
-    ) -> torch.Tensor:
-        # TODO(秦声鸿):加入context和token推理的判断逻辑
-        hidden_states = self.model(input_ids, positions, kv_caches,
-                                   input_metadata)
-        return hidden_states
+    )    -> torch.Tensor:
+        
+        if is_prefill:
+            return self._prefill(
+                batch_size=batch_size,
+                total_token_num=total_token_num,
+                max_len_in_batch=max_len_in_batch,
+                input_ids=input_ids,
+                b_req_idx=b_req_idx,
+                b_start_loc=b_start_loc,
+                b_seq_len=b_seq_len,
+                multimodal_params=None,
+                positions=positions,
+                input_metadata=input_metadata
+            )
+        else:
+            return self._decode(
+                batch_size=batch_size,
+                total_token_num=total_token_num,
+                max_len_in_batch=max_len_in_batch,
+                input_ids=input_ids,
+                b_req_idx=b_req_idx,
+                b_start_loc=b_start_loc,
+                b_seq_len=b_seq_len,
+                multimodal_params=None,
+                positions=positions,
+                input_metadata=input_metadata
+            )   
+            
+        # hidden_states = self.model(input_ids, positions, kv_caches,
+        #                            input_metadata)
+        # return hidden_states
 
     def sample(
         self,

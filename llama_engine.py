@@ -62,9 +62,29 @@ class LLamaEngine():
                 print(f'output: {output}\noutput_len: {len(output)}\n\n')
 
     def run_seq(self, request, request_id, max_output_len, 
-                sampling_params: SamplingParams = None):
+                sampling_params: SamplingParams = None,batch_size:int = 1):
         input_id = self.tokenizer.encode(request)
         seq = Sequence(request_id, request, input_id, block_size=0)   
+        
+        input_len = self.model_config.max_model_len
+        total_token_num = input_len * batch_size
+        b_req_idx = self.model.req_manager.alloc(batch_size).int()
+        b_start_loc = torch.zeros(batch_size,dtype=torch.int32,device="cuda")
+        b_seq_len = torch.zeros(batch_size,dtype=torch.int32,device="cuda")
+        for i in range(batch_size):
+            b_start_loc[i] = i * input_len
+            b_seq_len[i] = input_len
+        
+        # 开始进行prefill
+        sampling_metadata = _prepare_sample(seq, sampling_params)
+        position = torch.arange(0, seq.get_len())
+        seq_token_ids = seq.get_token_ids()
+        seq_token_ids = torch.tensor(seq_token_ids, dtype=torch.long, device=self.device)
+        hidden_state = self.model(batch_size,total_token_num,input_len,seq_token_ids,position,b_req_idx,b_start_loc,b_seq_len,True,None)
+        sample_output = self.model.sample(hidden_state, sampling_metadata)
+        new_token_id = sample_output[-1].samples[-1].output_token
+        tokens_logprob = sample_output[-1].samples[-1].logprobs
+        seq.append_token_id(new_token_id, tokens_logprob)
 
         for _ in range(max_output_len):
             sampling_metadata = _prepare_sample(seq, sampling_params)
@@ -72,7 +92,9 @@ class LLamaEngine():
             position = torch.arange(0, seq.get_len())
             seq_token_ids = seq.get_token_ids()
             seq_token_ids = torch.tensor(seq_token_ids, dtype=torch.long, device=self.device)
-            hidden_state = self.model(seq_token_ids, position, None, None)
+            # TODO:修改传入参数
+            hidden_state = self.model(batch_size,total_token_num,input_len,seq_token_ids,position,b_req_idx,b_start_loc,b_seq_len,False,None)
+            # hidden_state = self.model(seq_token_ids, position, None, None)
             sample_output = self.model.sample(hidden_state, sampling_metadata)
             new_token_id = sample_output[-1].samples[-1].output_token
             tokens_logprob = sample_output[-1].samples[-1].logprobs
