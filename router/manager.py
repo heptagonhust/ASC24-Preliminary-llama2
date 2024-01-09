@@ -4,36 +4,21 @@ TODO: 这一整个文件都需要大改，完全去掉它的 rpc 调用，改成
 '''
 
 
-
-
-
-import time
 import uuid
-import uvloop
-import asyncio
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-import zmq
-import zmq.asyncio
 from typing import Dict, List, Optional
-from ..sampling_params import SamplingParams
-from ..io_struct import Req, NormalReq, SplitFuseReq, Batch
-from ..multimodal_params import MultimodalParams
-from .model_infer.model_rpc import start_model_process, ModelRpcClient
-from .req_queue import ReqQueue
-from rpyc.utils.classic import obtain
-from lightllm.utils.infer_utils import calculate_time
-from ..io_struct import BatchTokenIdOut, AbortReq, ReqRunStatus
-from .stats import Stats
+from sampler.sampling_params import SamplingParams
+from io_struct import Req, NormalReq, SplitFuseReq, Batch
+from model_infer.model_rpc import start_model_process, ModelRpcClient
+from req_queue import ReqQueue
+from io_struct import BatchTokenIdOut, AbortReq, ReqRunStatus
 from .pause_strategy import Fcfs, select_paused_reqs
-from ..tokenizer import get_tokenizer
-from lightllm.utils.log_utils import init_logger
+from tokenizer import get_tokenizer
 
-logger = init_logger(__name__)
 
 
 class RouterManager:
 
-    def __init__(self, args, router_port, detokenization_port, model_rpc_ports):
+    def __init__(self, args):
         self.args = args
         self.model_weightdir = args.model_dir
         self.world_size = args.tp
@@ -46,22 +31,7 @@ class RouterManager:
         self.eos_id = args.eos_id
         self.has_wait_tokens = 0
         self.max_wait_tokens = 10
-        
-        context = zmq.asyncio.Context(2)
-        self.recv_from_httpserver = context.socket(zmq.PULL)
-        self.recv_from_httpserver.bind(f"tcp://127.0.0.1:{router_port}")
-        
-        self.send_to_detokenization = context.socket(zmq.PUSH)
-        self.send_to_detokenization.connect(f"tcp://127.0.0.1:{detokenization_port}")
-        self.model_rpc_ports = model_rpc_ports
 
-        self.is_splitfuse_mode = args.splitfuse_mode
-        self.splitfuse_block_size = args.splitfuse_block_size
-
-        if self.is_splitfuse_mode and len(args.prompt_cache_strs) != 0:
-            self.tokenizer = get_tokenizer(self.model_weightdir, args.tokenizer_mode, args.trust_remote_code)
-
-        self.stats_tool = Stats(not args.disable_log_stats, args.log_stats_interval)
         return
 
     async def wait_to_model_ready(self):
@@ -82,9 +52,6 @@ class RouterManager:
                 "mode" : self.mode,
                 "max_req_num" : self.args.running_max_req_size + 8,
                 "max_seq_length" : self.args.max_req_total_len + 8, # 留一点余量
-                "nccl_port" : self.args.nccl_port,
-                "is_splitfuse_mode" : self.is_splitfuse_mode,
-                "splitfuse_block_size" : self.splitfuse_block_size,
                 "return_all_prompt_logprobs" : self.args.return_all_prompt_logprobs
             }
             init_model_ret.append(self.model_rpcs[rank_id].init_model(kvargs))
@@ -123,19 +90,13 @@ class RouterManager:
         self,
         prompt_ids: List[int],
         sampling_params: SamplingParams,
-        multimodal_params: MultimodalParams,
         request_id: str,
         prompt_cache_len, 
         prompt_cache_req_id
     ):  
-        if self.is_splitfuse_mode:
-            req = SplitFuseReq(request_id, prompt_ids, sampling_params, multimodal_params, 
-                               prompt_cache_len, prompt_cache_req_id, self.splitfuse_block_size)
-        else:
-            req = NormalReq(request_id, prompt_ids, sampling_params, multimodal_params, 
+        req = NormalReq(request_id, prompt_ids, sampling_params,
                             prompt_cache_len, prompt_cache_req_id)
         self.req_queue.append(req)
-        self.send_to_detokenization.send_pyobj(req.to_req_detokenization_state())
         return
 
     async def abort(self, request_id):
@@ -159,16 +120,9 @@ class RouterManager:
                 if counter_count % 50 == 0:
                     total_used_tokens = self.prompt_cache_used_tokens + self.running_batch.batch_used_tokens + self.req_queue.pause_req_used_tokens
                     token_ratio = total_used_tokens / self.max_total_token_num
-                    logger.debug(
-                        f"current batch size: {len(self.running_batch.reqs)} " 
-                        f"paused req num: {len(self.req_queue.pause_req_dict)} "
-                        f"token used ratio: {token_ratio} "
-                    )
+
                     pass
-                self.stats_tool.print_stats()
                 
-            if self.running_batch is None:
-                await asyncio.sleep(0.01)  # 10ms
 
     async def _step(self):
         """
@@ -179,7 +133,6 @@ class RouterManager:
         if self.running_batch is None:
             new_batch = self.req_queue.generate_new_batch(self.running_batch)
             if new_batch is not None:
-                self.stats_tool.count_prompt_tokens(new_batch)
                 self.running_batch = new_batch
                 await self._prefill_batch(self.running_batch)
                 self._filter_runing_batch()
@@ -191,7 +144,6 @@ class RouterManager:
             new_mini_batch = self.req_queue.generate_new_batch(self.running_batch)
             self.has_wait_tokens = 0
             if new_mini_batch is not None:
-                self.stats_tool.count_prompt_tokens(new_mini_batch)
                 await self._prefill_batch(new_mini_batch)
                 if not new_mini_batch.is_clear():
                     await self._merge_batch(self.running_batch, new_mini_batch)
@@ -201,7 +153,6 @@ class RouterManager:
         # 正常 decode 阶段， 如果可以直接decode就直接decode，否则通过暂停策略暂停一些请求
         # 释放一些管理的 token
         if self._can_decode(self.running_batch):
-            self.stats_tool.count_output_tokens(self.running_batch)
             await self._decode_batch(self.running_batch)
             self._filter_runing_batch()
             self.has_wait_tokens += 1
@@ -210,7 +161,6 @@ class RouterManager:
             # pause strategy
             paused_reqs = select_paused_reqs(self.running_batch, self.pause_strategy, self.req_queue, self.max_total_token_num)
             await self._pause_reqs(self.running_batch, paused_reqs)
-            logger.debug(f"pasued req num: {len(self.req_queue.pause_req_dict)}")
             self.has_wait_tokens = 0
             return
         return
@@ -229,20 +179,19 @@ class RouterManager:
 
     async def _prefill_batch(self, batch:Batch):
         await self._init_batch(batch)
-        if not self.is_splitfuse_mode:
-            # 在 非 splitfuse 模式下，才需要真的执行 prefill 的操作。
-            rets = [self.model_rpcs[tp_rank].prefill_batch(batch.batch_id) for tp_rank in range(self.world_size)]
-            ans = await asyncio.gather(*rets)
-            if self.world_size != 1:
-                req_to_out_status = obtain(ans[0])
-            else:
-                req_to_out_status = ans[0]
+        # 在 非 splitfuse 模式下，才需要真的执行 prefill 的操作。
+        rets = [self.model_rpcs[tp_rank].prefill_batch(batch.batch_id) for tp_rank in range(self.world_size)]
+        ans = await asyncio.gather(*rets)
+        if self.world_size != 1:
+            req_to_out_status = obtain(ans[0])
+        else:
+            req_to_out_status = ans[0]
 
-            self._update_out_status_to_batch(batch, req_to_out_status)
-            unfinished_req_ids, finished_req_ids = batch.mark_and_get_finished_req_and_preupdate_status(self.eos_id)
-            self._send_to_detokenization_proc(batch, req_to_out_status)
-            batch.filter_out_finished_req(unfinished_req_ids, finished_req_ids)
-            await self._handle_finish_req(batch, unfinished_req_ids, finished_req_ids)
+        self._update_out_status_to_batch(batch, req_to_out_status)
+        unfinished_req_ids, finished_req_ids = batch.mark_and_get_finished_req_and_preupdate_status(self.eos_id)
+        self._send_to_detokenization_proc(batch, req_to_out_status)
+        batch.filter_out_finished_req(unfinished_req_ids, finished_req_ids)
+        await self._handle_finish_req(batch, unfinished_req_ids, finished_req_ids)
         return
     
     async def _prefill_to_init_prompt_cache(self, batch:Batch):
@@ -353,9 +302,7 @@ class RouterManager:
             req = batch.id_to_reqs[req_id]
             if new_token_id is not None:
                 batch_out.reqs_infs.append((req_id, new_token_id, new_gen_metadata, req.has_generate_finished, req.aborted))
-    
-        self.send_to_detokenization.send_pyobj(batch_out)
-        return
+            return
 
     async def loop_for_netio_req(self):
         while True:
@@ -367,7 +314,6 @@ class RouterManager:
                 abort_req = recv_req
                 request_id = abort_req.req_id
                 await self.abort(request_id)
-                self.send_to_detokenization.send_pyobj(abort_req)
             else:
                 assert False, f"Error Req Inf {recv_req}"
 

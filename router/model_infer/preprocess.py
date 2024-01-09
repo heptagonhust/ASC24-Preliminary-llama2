@@ -1,11 +1,15 @@
 import torch
 import numpy as np
+from typing import List, Dict
+
+
 from .infer_batch import requests_mapping, InferReq, InferBatch
 from io_struct import ReqRunStatus
 
 #@calculate_time(show=True, min_cost_ms=1)
-def prepare_prefill_inputs(batch:InferBatch, is_multimodal=False):
-    run_reqs, not_run_reqs = [], []
+def prepare_prefill_inputs(batch: InferBatch):
+    run_reqs: List[InferReq] = []
+    not_run_reqs: List[InferReq] = []
     nopad_total_token_num = 0
     nopad_max_len_in_batch = 0
     start_loc = 0
@@ -13,7 +17,6 @@ def prepare_prefill_inputs(batch:InferBatch, is_multimodal=False):
     nopad_b_req_idx = []
     nopad_b_start_loc = []
     nopad_b_seq_len = []
-    batch_multimodal_params = []
     for request_id in batch.request_ids:
         req : InferReq = requests_mapping[request_id]
         assert req.req_status == ReqRunStatus.RUNNING
@@ -24,7 +27,6 @@ def prepare_prefill_inputs(batch:InferBatch, is_multimodal=False):
             continue
         
         run_reqs.append(req)
-        batch_multimodal_params.append(req.multimodal_params)
         nopad_b_req_idx.append(req.req_idx)
         nopad_b_start_loc.append(start_loc)
         
@@ -55,8 +57,6 @@ def prepare_prefill_inputs(batch:InferBatch, is_multimodal=False):
             "b_seq_len": nopad_b_seq_len,
             "is_prefill": True,
         }
-        if is_multimodal:
-            kwargs["multimodal_params"] = batch_multimodal_params
         return kwargs, run_reqs, not_run_reqs
     else:
         return {}, run_reqs, not_run_reqs
