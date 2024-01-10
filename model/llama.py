@@ -196,7 +196,7 @@ class LlamaAttention(nn.Module):
         print(v.shape)
         #! rotary embedding encoding for key & value
         if infer_state.is_prefill == False:
-            embedding_positions = torch.arange(0,1)
+            embedding_positions = positions[-1:]
         else:
             embedding_positions = positions
         # q, k = self.rotary_emb(positions, q, k)
