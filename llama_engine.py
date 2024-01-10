@@ -37,8 +37,8 @@ class LLamaEngine():
         with _set_default_torch_dtype(model_config.dtype):
             model = LlamaForCausalLM(
                 model_config.hf_model_config,
-                weight_dir="/data/70B-hf",
-                max_total_token_num=model_config.max_model_len,
+                weight_dir="/data/7B-chat-hf",
+                max_total_token_num=2048, # TODO:确定真实值？
                 max_req_num=1
                                      )  
             model.to(device=device)
@@ -66,7 +66,7 @@ class LLamaEngine():
         input_id = self.tokenizer.encode(request)
         seq = Sequence(request_id, request, input_id, block_size=0)   
         
-        input_len = self.model_config.max_model_len
+        input_len = seq.get_len()
         total_token_num = input_len * batch_size
         b_req_idx = self.model.req_manager.alloc(batch_size).int()
         b_start_loc = torch.zeros(batch_size,dtype=torch.int32,device="cuda")
@@ -80,21 +80,26 @@ class LLamaEngine():
         position = torch.arange(0, seq.get_len())
         seq_token_ids = seq.get_token_ids()
         seq_token_ids = torch.tensor(seq_token_ids, dtype=torch.long, device=self.device)
+        # print(seq_token_ids.shape[0])
+        # print(total_token_num)
         hidden_state = self.model(batch_size,total_token_num,input_len,seq_token_ids,position,b_req_idx,b_start_loc,b_seq_len,True,None)
         sample_output = self.model.sample(hidden_state, sampling_metadata)
         new_token_id = sample_output[-1].samples[-1].output_token
         tokens_logprob = sample_output[-1].samples[-1].logprobs
         seq.append_token_id(new_token_id, tokens_logprob)
 
-        for _ in range(max_output_len):
+        for i in range(max_output_len):
             sampling_metadata = _prepare_sample(seq, sampling_params)
 
             position = torch.arange(0, seq.get_len())
             seq_token_ids = seq.get_token_ids()
             seq_token_ids = torch.tensor(seq_token_ids, dtype=torch.long, device=self.device)
+            new_token_id_tensor = torch.tensor([new_token_id], dtype=torch.long, device=self.device)
             # TODO:修改传入参数
-            hidden_state = self.model(batch_size, total_token_num, input_len,
-                                      seq_token_ids, position, b_req_idx,
+            print('new_token_id_tensor:')
+            print(new_token_id_tensor.shape)
+            hidden_state = self.model(batch_size, total_token_num, input_len + i,
+                                      new_token_id_tensor, position, b_req_idx,
                                       b_start_loc, b_seq_len, False, None)
             # hidden_state = self.model(seq_token_ids, position, None, None)
             sample_output = self.model.sample(hidden_state, sampling_metadata)

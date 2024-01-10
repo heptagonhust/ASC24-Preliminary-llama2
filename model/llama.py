@@ -180,12 +180,31 @@ class LlamaAttention(nn.Module):
             torch.Tensor: _description_
         """
         #! qkv: [batch_size, seq_len, tp_q_size + 2 * tp_kv_size]
+        print('hidden_states:')
+        print(hidden_states.shape)
         qkv = self.qkv_proj(hidden_states)
+        print('qkv:')
+        print(qkv.shape)
         #! q: [batch_size, seq_len, tp_q_size]
         #! k,v: [batch_size, seq_len, tp_kv_size]
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        print('q:')
+        print(q.shape)
+        print('k:')
+        print(k.shape)
+        print('v:')
+        print(v.shape)
         #! rotary embedding encoding for key & value
-        q, k = self.rotary_emb(positions, q, k)
+        if infer_state.is_prefill == False:
+            embedding_positions = torch.arange(0,1)
+        else:
+            embedding_positions = positions
+        # q, k = self.rotary_emb(positions, q, k)
+        q, k = self.rotary_emb(embedding_positions, q, k)
+        print('modify k:')
+        print(k.shape)
+        print('modify q:')
+        print(q.shape)
         attn_output = self.attn.forward(q, k, v, infer_state)
         output = self.o_proj(attn_output)
         return output
@@ -205,7 +224,6 @@ class LlamaDecoderLayer(nn.Module):
         rope_scaling = getattr(config, "rope_scaling", None)
         max_position_embeddings = getattr(config, "max_position_embeddings",
                                           8192)
-        # TODO:接入layer_infer_lightllm中attention模块
         self.self_attn = LlamaAttention(
             layer_num=layer_num,
             hidden_size=self.hidden_size,

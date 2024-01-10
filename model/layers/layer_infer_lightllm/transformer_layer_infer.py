@@ -58,12 +58,35 @@ class TransformerLayerInferTpl(TransformerLayerInfer):
             cache_v = infer_state.value_buffer 
         return cache_k, cache_v
     
-    def _copy_kv_to_kvcache(self, k, v, cache_k, cache_v):
+    def _copy_kv_to_kvcache_context(self, k, v, cache_k, cache_v):
         '''
         copy k, v we generated in "qkv_proj" to cache_k, cache_v
         '''
         cache_k.view(-1, self.tp_k_head_num_ * self.head_dim_).copy_(k.view(-1, self.tp_k_head_num_ * self.head_dim_))
         cache_v.view(-1, self.tp_v_head_num_ * self.head_dim_).copy_(v.view(-1, self.tp_v_head_num_ * self.head_dim_))
+        return
+    
+    def _copy_kv_to_kvcache_decode(self, k, v, cache_k, cache_v):
+        '''
+        copy k, v we generated in "qkv_proj" to cache_k, cache_v
+        '''
+        # 只选取k的第一维中的最后一个元素
+        # TODO:改回来
+        print('k:')
+        print(k.shape)
+        k_last = k[:, -1:, :]        
+        print('k_last:')
+        print(k_last.shape)
+
+        # 确保形状正确
+        k_view = k_last.view(-1, self.tp_k_head_num_ * self.head_dim_)
+        cache_k_view = cache_k.view(-1, self.tp_k_head_num_ * self.head_dim_)
+        print(f"k_view_shape:{k_view.shape}, cache_k_view_shape:{cache_k_view.shape}")
+        
+        # 执行复制操作
+        cache_k_view.copy_(k_view)
+        cache_v.view(-1, self.tp_v_head_num_ * self.head_dim_).copy_(v.view(-1, self.tp_v_head_num_ * self.head_dim_))
+
         return
     
     def _post_cache_kv(self, cache_k, cache_v, infer_state:InferStateInfo):
@@ -86,14 +109,18 @@ class TransformerLayerInferTpl(TransformerLayerInfer):
 
     def _context_attention(self, q, k, v, infer_state: InferStateInfo):
         cache_k, cache_v = self._pre_cache_kv(infer_state)
-        self._copy_kv_to_kvcache(k, v, cache_k, cache_v)
+        self._copy_kv_to_kvcache_context(k, v, cache_k, cache_v)
         self._post_cache_kv(cache_k, cache_v, infer_state)
         o = self._context_attention_kernel(q, cache_k, cache_v, infer_state)
         return o
 
     def _token_attention(self, q, k, v, infer_state: InferStateInfo):
         cache_k, cache_v = self._pre_cache_kv(infer_state)
-        self._copy_kv_to_kvcache(k, v, cache_k, cache_v)
+        print('cache_k')
+        print(cache_k.shape)
+        print('cache_v')
+        print(cache_v.shape)
+        self._copy_kv_to_kvcache_decode(k, v, cache_k, cache_v)
         self._post_cache_kv(cache_k, cache_v, infer_state)
         o = self._token_attention_kernel(q, infer_state)
         return o
