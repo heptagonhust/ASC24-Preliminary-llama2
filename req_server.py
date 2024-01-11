@@ -89,6 +89,9 @@ class ReqServer:
 
         # 寻找是否有可用的prompt cache 可用
         prompt_cache_len, prompt_cache_req_id = self._find_prompt_cache_req(prompt_ids)
+
+        # 将 sampling_params 的 max_tokens 设置为 output_len
+        sampling_params.max_tokens = output_len
   
 
         self.send_to_router.send_pyobj((request_id, prompt_ids, sampling_params, prompt_cache_len, prompt_cache_req_id))

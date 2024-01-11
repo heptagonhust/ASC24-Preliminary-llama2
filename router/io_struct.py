@@ -17,7 +17,7 @@ class Req:
         self.request_id = request_id
         self.prompt_ids = prompt_ids
         self.input_len = len(prompt_ids)
-        self.max_output_len = sample_params.max_new_tokens
+        self.max_output_len = sample_params.max_tokens
         self.sample_params = sample_params
         self.output_ids = []
         self.output_metadata_list = []
