@@ -1,7 +1,7 @@
 import sys
 import os
 import signal
-import multiprocessing as mp
+import torch.multiprocessing as mp
 from typing import List
 
 
@@ -10,6 +10,7 @@ def start_submodule_processes(start_funcs=[], start_args=[]):
     pipe_readers = []
     processes: List[mp.Process] = []
     for start_func, start_arg in zip(start_funcs, start_args):
+        mp.set_start_method('spawn')
         pipe_reader, pipe_writer = mp.Pipe(duplex=False)
         process = mp.Process(
             target=start_func,
