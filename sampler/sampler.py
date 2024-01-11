@@ -57,8 +57,14 @@ class Sampler(nn.Module):
         embedding_bias: Optional[torch.Tensor] = None,
     ) -> SamplerOutput:
         # Get the hidden states that we use for sampling.
+        
+        print('before sample hidden_states:')
+        print(hidden_states.shape)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1]).index_select(
                                             0, sampling_metadata.selected_token_indices)
+
+        print('sample hidden_states:')
+        print(hidden_states.shape)
 
         # Get the logits for the next tokens.
         #! projection from hidden_states of last generated token to logits of token
@@ -104,8 +110,16 @@ class Sampler(nn.Module):
         # Use log_softmax to ensure numerical stability.
         logprobs = torch.log_softmax(logits, dim=-1, dtype=torch.float)
 
+        print('probs:')
+        print(probs.shape)
+        print('logprobs:')
+        print(logprobs.shape)
+
         # Sample the next tokens.
         sample_results = _sample(probs, logprobs, sampling_metadata)
+        print('sample_results:')
+        print(sample_results)
+        
         # Get the logprobs query results.
         prompt_logprobs, sample_logprobs = _get_logprobs(
             logprobs, sampling_metadata, sample_results)
@@ -390,7 +404,17 @@ def _multinomial(
                                          probs.shape[1]).contiguous().view(
                                              -1, probs.shape[1])
     q = torch.empty_like(probs).exponential_(1)
-    return probs.div_(q).argmax(dim=1).view(-1, num_samples)
+    
+    print('probs:')
+    print(probs.shape)
+    print('q:')
+    print(q.shape)
+    
+    results = probs.div_(q).argmax(dim=1).view(-1, num_samples)
+    print('results:')
+    print(results.shape)
+    print(results)
+    return results
 
 
 def _sample(
@@ -436,14 +460,20 @@ def _sample(
                     _, sampling_params = seq_group
                     max_best_of = max(max_best_of, sampling_params.best_of)
             #! prob: Tensor(sample_seq_len, token_space_size)
+            print('before multinomial:')
+            print(probs[sample_indices].shape)
             multinomial_samples = _multinomial(probs[sample_indices],
                                                max_best_of)
+            
         elif sampling_type == SamplingType.BEAM:
             beam_search_logprobs = logprobs[sample_indices]
         else:
             raise ValueError(f"Unsupported sampling type: {sampling_type}")
 
     # GPU<->CPU sync happens in the loop below.
+
+    print('after multinomial:')
+    print(multinomial_samples.shape)
 
     for sampling_type in SamplingType:
         if sampling_type not in sample_metadata:
