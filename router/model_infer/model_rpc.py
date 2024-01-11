@@ -7,11 +7,11 @@ from router.model_infer.infer_batch import InferBatch
 
 from model.llama import LlamaForCausalLM
 
-from preprocess import prepare_decode_inputs, prepare_prefill_inputs
-from postprocess import sample
+from router.model_infer.preprocess import prepare_decode_inputs, prepare_prefill_inputs
+from router.model_infer.postprocess import sample
 from sampler.sampling_metadata import SamplingParams, _prepare_sample
-from infer_batch import requests_mapping
-from infer_batch import InferReq
+from router.model_infer.infer_batch import requests_mapping
+from router.model_infer.infer_batch import InferReq
 
 from model.parallel_utils.parallel_state import setup_distributed
 from model.model_metadata import ParallelConfig, ModelConfig

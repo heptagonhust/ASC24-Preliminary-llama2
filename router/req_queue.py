@@ -2,7 +2,7 @@ import uuid
 import asyncio
 import numpy as np
 from typing import List
-from io_struct import Batch, Req, ReqRunStatus
+from router.io_struct import Batch, Req, ReqRunStatus
 from typing import Dict, List, Optional, Tuple
 
 class ReqQueue:

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict
 from manager.request_manager import RequestManager
 from manager.memory_manager import MemoryManager
-from io_struct import ReqRunStatus
+from router.io_struct import ReqRunStatus
 
 
 requests_mapping = {}

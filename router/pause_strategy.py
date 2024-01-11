@@ -1,9 +1,9 @@
 import uuid
 import numpy as np
 from typing import List, Tuple
-from io_struct import Batch, Req
-from req_queue import ReqQueue
-from io_struct import ReqRunStatus
+from router.io_struct import Batch, Req
+from router.req_queue import ReqQueue
+from router.io_struct import ReqRunStatus
 
 class Strategy:
 

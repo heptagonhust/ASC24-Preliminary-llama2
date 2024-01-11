@@ -3,8 +3,8 @@ import numpy as np
 from typing import List, Dict
 
 
-from .infer_batch import requests_mapping, InferReq, InferBatch
-from io_struct import ReqRunStatus
+from router.model_infer.infer_batch import requests_mapping, InferReq, InferBatch
+from router.io_struct import ReqRunStatus
 
 #@calculate_time(show=True, min_cost_ms=1)
 def prepare_prefill_inputs(batch: InferBatch):
