@@ -1,6 +1,6 @@
 from sampler.sampling_metadata import SamplingParams, _prepare_sample
 from model.parallel_utils.parallel_state import setup_distributed
-from model.model_metadata import ModelConfig, ParallelConfig, PortConfig
+from model.model_metadata import ModelConfig, ParallelConfig, PortConfig, ReqConfig
 from model.llama import LlamaForCausalLM
 from sequence.sequence import Sequence
 import torch.distributed as dist
@@ -30,7 +30,14 @@ def _set_default_torch_dtype(dtype: torch.dtype):
     torch.set_default_dtype(old_dtype)
 
 class RequestEngine():
-    def __init__(self, model_config: ModelConfig, parallel_config_llama:ParallelConfig, port_config:PortConfig) -> nn.Module:
+    def __init__(
+        self,
+        model_config: ModelConfig,
+        parallel_config_llama:ParallelConfig,
+        port_config:PortConfig,
+        sampling_params: SamplingParams = None,
+        req_config: ReqConfig = None
+    ) -> nn.Module:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         # set random seeds
         random.seed(model_config.seed)
@@ -51,11 +58,14 @@ class RequestEngine():
         self.requests_queue = asyncio.Queue()
         self.results_queue = []
 
+        self.sampling_params = sampling_params
+
         self.http_server_manager = ReqServer(
             model_dir=model_config.model,
             max_total_token_num=model_config.max_model_len,
-            max_req_input_len=model_config.max_req_input_len,
-            max_req_total_len=model_config.max_req_total_len,
+
+            max_req_total_len=req_config.max_req_total_len,
+
             router_port=port_config.router_port,
             req_server_port=port_config.req_server_port,
         )
@@ -63,7 +73,7 @@ class RequestEngine():
     async def worker(self):
         while True:
             request_id, prompt, prompt_len, output_len = await self.requests_queue.get()
-            result = await self.http_server_manager.generate(prompt, None, request_id)
+            result = await self.http_server_manager.generate(prompt, output_len, self.sampling_params, request_id)
             result_with_input_prompt = (request_id, prompt, result)
             heapq.heappush(self.results_queue, result_with_input_prompt)
             self.requests_queue.task_done()

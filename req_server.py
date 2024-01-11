@@ -18,7 +18,6 @@ class ReqServer:
         self,
         model_dir,
         max_total_token_num,
-        max_req_input_len,
         max_req_total_len,
         router_port,
         req_server_port,
@@ -39,7 +38,6 @@ class ReqServer:
         self.req_id_to_out_inf = {}  # value type (out_str, metadata, finished, event)
 
         self.total_token_num = max_total_token_num
-        self.max_req_input_len = max_req_input_len
         self.max_req_total_len = max_req_total_len
 
         self._init_prompt_cache()
@@ -64,19 +62,18 @@ class ReqServer:
                     break
         return prompt_cache_len, prompt_cache_req_id
 
-    async def generate(self, prompt, sampling_params: SamplingParams, request_id) -> Generator[tuple, Any, None]:
+    async def generate(
+        self,
+        prompt,
+        output_len,
+        sampling_params: SamplingParams,
+        request_id
+    ) -> Generator[tuple, Any, None]:
         prompt_ids = self.tokenizer.encode(prompt)
         # special tokenizer for multimodal_params
         prompt_tokens = len(prompt_ids)
 
-        if prompt_tokens > self.max_req_input_len:
-
-            raise ValueError(
-                f"the input prompt token len {prompt_tokens} is too long > {self.max_req_input_len}"
-            )
-
-
-        req_total_len = prompt_tokens + sampling_params.max_tokens
+        req_total_len = prompt_tokens + output_len + 1
         if req_total_len > self.max_req_total_len:
             raise ValueError(
                 f"the req token total len (input len + output len) is too long > max_req_total_len:{self.max_req_total_len}"

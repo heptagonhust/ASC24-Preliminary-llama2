@@ -65,6 +65,33 @@ class ModelConfig:
         self.dtype = torch.float16
 
 
+class ReqConfig:
+    """Configuration for the request server and router.
+
+    Args:
+        batch_size: 批处理最大的大小
+        max_total_token_num: 模型最大长度
+        max_req_num: 同时到来的最大请求数
+        max_req_total_len: 输入+输出最大长度
+        router_token_ratio: router的token占用率
+        router_max_new_token_len: router最大的新token长度
+    """
+    def __init__(
+        self,
+        batch_size: int,
+        max_total_token_num: int,
+        max_req_num: int,
+        max_req_total_len: int,
+        router_token_ratio: float,
+        router_max_new_token_len: int,
+    ) -> None:
+        self.batch_size = batch_size
+        self.max_req_num = max_req_num
+        self.max_req_total_len = max_req_total_len
+        self.max_total_token_num = max_total_token_num
+        self.router_token_ratio = router_token_ratio
+        self.router_max_new_token_len = router_max_new_token_len
+
 class InputMetadata:
     """Metadata for input sequences. Used in PagedAttention.
 

@@ -1,6 +1,6 @@
 # from llama_engine import LLamaEngine
 from llama_engine_new import RequestEngine
-from model.model_metadata import ModelConfig, ParallelConfig, PortConfig
+from model.model_metadata import ModelConfig, ParallelConfig, PortConfig, ReqConfig
 from sampler.sampling_metadata import SamplingParams
 import json
 from utils.start_utils import start_submodule_processes, kill_submodule_processes
@@ -11,11 +11,19 @@ if __name__ == "__main__":
     model_config_llama = ModelConfig("/data/7B-chat-hf", "/data/7B-chat-hf", True, 1, None)
     parallel_config_llama = ParallelConfig(pipeline_parallel_size = 1, tensor_parallel_size = 1)
     port_config = PortConfig(router_port=55555, req_server_port=55556)
-    LLama = RequestEngine(model_config_llama, parallel_config_llama)
+    sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
+    req_config = ReqConfig(batch_size=20,
+                           max_total_token_num=121060,
+                           max_req_num=10000,
+                           max_req_total_len=2048+2048,
+                           router_token_ratio=0.5,
+                           router_max_new_token_len=2048)
+
+
+    LLama = RequestEngine(model_config_llama, parallel_config_llama, port_config, sampling_params, req_config)
     with open('./scrambled_sampled_dataset.json') as f:
         requests = json.load(f)
     requests = requests[100:101]
-    sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
 
 
     '''
@@ -33,15 +41,17 @@ if __name__ == "__main__":
     '''
     submodule_pid = start_submodule_processes(
         start_funcs=[start_router_process],
-        start_args=[(model_config_llama.model,
-                     20,
-                     121060,
-                     10000,
-                     2048 + 2048,
-                     0.5,
-                     2048,
-                     port_config.router_port,
-                     port_config.req_server_port)]
+        start_args=[(
+            model_config_llama.model,
+            req_config.batch_size,
+            req_config.max_total_token_num,
+            req_config.max_req_num,
+            req_config.max_req_total_len,
+            req_config.router_token_ratio,
+            req_config.router_max_new_token_len,
+            port_config.router_port,
+            port_config.req_server_port
+        )]
     )
 
     LLama.generate(requests, sampling_params=sampling_params)
