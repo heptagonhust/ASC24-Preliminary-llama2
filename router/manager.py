@@ -1,4 +1,5 @@
 from typing import Dict, List, Optional
+from model.model_metadata import ParallelConfig
 from sampler.sampling_params import SamplingParams
 from io_struct import Req, NormalReq, SplitFuseReq, Batch
 from model_infer.model_rpc import ModelRpcServer
@@ -40,7 +41,8 @@ class RouterManager:
             router_token_ratio,
             router_max_new_token_len,
             router_port,
-            req_port
+            req_port,
+            parallel_config_llama: ParallelConfig,
         ):
         self.batch_size = batch_size
         self.weight_dir = model_dir
@@ -67,6 +69,8 @@ class RouterManager:
 
         self.model_rpc_server = ModelRpcServer()
 
+        self.parallel_config_llama = parallel_config_llama
+
         context = zmq.asyncio.Context(2)
 
         self.recv_from_req_server = context.socket(zmq.PULL)
@@ -84,7 +88,8 @@ class RouterManager:
             "max_total_token_num" : self.max_total_token_num,
             "max_req_num" : self.max_req_num + 8, # 最大同时发起的请求数
             "max_seq_length" : self.max_req_total_len + 8, # 最大的请求长度
-            "return_all_prompt_logprobs" : False
+            "return_all_prompt_logprobs" : False,
+            "parallel_config_llama" : self.parallel_config_llama,
         }
         self.model_rpc_server.init_model(kvargs)
 
@@ -359,7 +364,8 @@ def start_router_process(
         router_token_ratio,
         router_max_new_token_len,
         router_port,
-        req_port
+        req_port,
+        parallel_config_llama
     ):
     '''Helper function to start router process.
 
@@ -383,7 +389,8 @@ def start_router_process(
         router_token_ratio,
         router_max_new_token_len,
         router_port,
-        req_port
+        req_port,
+        parallel_config_llama
     )
     router.wait_to_model_ready()
     

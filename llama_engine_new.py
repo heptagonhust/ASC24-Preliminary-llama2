@@ -39,15 +39,6 @@ class RequestEngine():
         req_config: ReqConfig = None
     ) -> nn.Module:
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        # set random seeds
-        random.seed(model_config.seed)
-        torch.manual_seed(model_config.seed)
-        np.random.seed(model_config.seed)
-        torch.cuda.manual_seed_all(model_config.seed)
-        
-        setup_distributed(parallel_config_llama)
-        with _set_default_torch_dtype(model_config.dtype):
-            pass
         self.model_config = model_config
         self.device = device
         self.tokenizer = AutoTokenizer.from_pretrained(

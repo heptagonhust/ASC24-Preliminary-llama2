@@ -50,7 +50,8 @@ if __name__ == "__main__":
             req_config.router_token_ratio,
             req_config.router_max_new_token_len,
             port_config.router_port,
-            port_config.req_server_port
+            port_config.req_server_port,
+            parallel_config_llama
         )]
     )
 
