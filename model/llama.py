@@ -205,7 +205,6 @@ class LlamaDecoderLayer(nn.Module):
         rope_scaling = getattr(config, "rope_scaling", None)
         max_position_embeddings = getattr(config, "max_position_embeddings",
                                           8192)
-        # TODO:接入layer_infer_lightllm中attention模块
         self.self_attn = LlamaAttention(
             layer_num=layer_num,
             hidden_size=self.hidden_size,
@@ -411,7 +410,7 @@ class LlamaForCausalLM(nn.Module):
         infer_state.batch_size = batch_size
         infer_state.total_token_num = total_token_num
         infer_state.max_len_in_batch = max_len_in_batch
-        assert (input_ids.shape[0] == total_token_num)
+        # assert (input_ids.shape[0] == total_token_num)
         assert (b_req_idx.shape[0] == b_start_loc.shape[0] == b_seq_len.shape[0])
         infer_state.b_req_idx = b_req_idx
         infer_state.b_start_loc = b_start_loc

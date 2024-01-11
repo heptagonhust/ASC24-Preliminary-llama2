@@ -1,7 +1,3 @@
-'''
-TODO: 这一整个文件都需要大改，完全去掉它的 rpc 调用，改成直接调用 model 的函数
-      其他的类应该可以先留着
-'''
 
 
 import torch
@@ -17,29 +13,70 @@ from sampler.sampling_metadata import SamplingParams, _prepare_sample
 from infer_batch import requests_mapping
 from infer_batch import InferReq
 
+from model.parallel_utils.parallel_state import setup_distributed
+from model.model_metadata import ParallelConfig, ModelConfig
+import random
+import numpy as np
+import contextlib
 
 
+@contextlib.contextmanager
+def _set_default_torch_dtype(dtype: torch.dtype):
+    """Sets the default torch dtype to the given dtype."""
+    old_dtype = torch.get_default_dtype()
+    torch.set_default_dtype(dtype)
+    yield
+    torch.set_default_dtype(old_dtype)
 
 class ModelRpcServer():
 
-    def init_model(self, config: LlamaConfig, **kvargs):        
+    def init_model(self, config: LlamaConfig, **kwargs):
+        '''
+        things need to be passed by kwargs:
+        weight_dir: str
+        max_total_token_num: int
+        max_req_num: int
+        max_seq_length: int
+        return_all_prompt_logprobs: bool
+        
+        seed: int
+        parallel_config_llama: ParallelConfig
+        dtype: torch.dtype
+        '''
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        # set random seeds
+        self.seed = kwargs.get("seed", 0)
+        random.seed(self.seed)
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
+        torch.cuda.manual_seed_all(self.seed)
 
-        self.return_all_prompt_logprobs = kvargs.get("return_all_prompt_logprobs", False)
+        self.return_all_prompt_logprobs = kwargs.get("return_all_prompt_logprobs", False)
+
+        self.parallel_config = kwargs["parallel_config_llama"]
 
         self.cache : Dict[int, InferBatch] = {}
 
-        weight_dir = kvargs["weight_dir"]
-        max_total_token_num = kvargs["max_total_token_num"]
+        weight_dir = kwargs["weight_dir"]
+        max_total_token_num = kwargs["max_total_token_num"]
 
         model_kvargs = {
             "weight_dir": weight_dir,
             "max_total_token_num": max_total_token_num,
-            "max_req_num": kvargs.get("max_req_num", 1000),
-            "max_seq_length": kvargs.get("max_seq_length", 1024 * 5),
+            "max_req_num": kwargs.get("max_req_num", 1000),
+            "max_seq_length": kwargs.get("max_seq_length", 1024 * 5),
             "return_all_prompt_logprobs": self.return_all_prompt_logprobs
         }
 
-        self.model = LlamaForCausalLM(config, **model_kvargs)
+        self._setup_distributed(self.parallel_config)
+
+        self.dtype = kwargs.get("dtype", torch.float32)
+        with _set_default_torch_dtype(self.dtype):
+            self.model = LlamaForCausalLM(config, **model_kvargs)
+            self.model.to(device=device)
+            self.model.load_weights(weight_dir)
+        
+        self.device = device
         
         return
     
@@ -133,6 +170,9 @@ class ModelRpcServer():
         self.cache[batch.batch_id] = batch
         return output_dict
     
+    def _setup_distributed(parallel_config_llama: ParallelConfig):
+        setup_distributed(parallel_config_llama)
+    
     @torch.no_grad()
     def _prefill_to_return_all_prompt_logprobs(self, batch_id: int):
         output_dict = {}
@@ -146,7 +186,6 @@ class ModelRpcServer():
             b_seq_len = kwargs["b_seq_len"]            
             last_index = torch.cumsum(b_seq_len, dim=0, dtype=torch.long) - 1
             logits = prompt_all_logits[last_index, :]
-            # TODO: 这里需要修改传参
             next_token_ids, next_token_probs = self.sampler(logits, run_reqs)
             next_token_ids = next_token_ids.detach().cpu().numpy()
             next_token_logprobs = torch.log(next_token_probs).detach().cpu().numpy()

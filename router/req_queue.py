@@ -3,22 +3,21 @@ import asyncio
 import numpy as np
 from typing import List
 from io_struct import Batch, Req, ReqRunStatus
+from typing import Dict, List, Optional, Tuple
 
 class ReqQueue:
 
     def __init__(self, args, prompt_cache_used_tokens, prompt_cache_req_num) -> None:
-        self.max_total_tokens = args.max_total_token_num
-        assert args.batch_max_tokens is not None
-        self.batch_max_tokens = args.batch_max_tokens
-        self.running_max_req_size = args.running_max_req_size
+        self.max_total_tokens = args["max_total_token_num"]
+        self.batch_max_tokens = args["batch_max_tokens"]
+        self.running_max_req_size = args["running_max_req_size"]
         self.waiting_req_list: List[Req] = []
-        self.router_token_ratio = args.router_token_ratio
-        self.router_max_new_token_len = args.router_max_new_token_len
-        self.pause_req_dict = {} # 用于保存队列中被暂停的请求，暂停原因为 ReqRunStatus.PAUSED_AND_KVKEEP  ReqRunStatus.PAUSED_AND_OFFLOAD
+        self.router_token_ratio = args["router_token_ratio"]
+        self.router_max_new_token_len = args["router_max_new_token_len"]
+        self.pause_req_dict: Dict[str, Req] = {} # 用于保存队列中被暂停的请求，暂停原因为 ReqRunStatus.PAUSED_AND_KVKEEP  ReqRunStatus.PAUSED_AND_OFFLOAD
         self.pause_req_used_tokens = 0
 
-        self.is_splitfuse_mode = args.splitfuse_mode
-        self.splitfuse_block_size = args.splitfuse_block_size
+        self.is_splitfuse_mode = False
 
         # 当使用 prompt cache 特性时的维护变量
         self.prompt_cache_used_tokens = prompt_cache_used_tokens
@@ -44,7 +43,6 @@ class ReqQueue:
         else:
             self.cache_len_list = []
 
-    # @calculate_time(show=True, min_cost_ms=0.1)
     def _can_add_new_req(self, req:Req, is_busy):
         self.cache_len_list.append(req.get_tuple_tokens(is_busy, self.router_max_new_token_len)) # hard to analysis
         self.cache_len_list.sort(key=lambda x: -x[1])

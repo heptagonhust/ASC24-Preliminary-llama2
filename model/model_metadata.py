@@ -2,6 +2,17 @@ from utils.transformers_utils import get_config_from_hf, get_max_len_from_hf
 from typing import List, Optional
 import torch
 
+
+class PortConfig:
+    def __init__(
+        self,
+        router_port,
+        req_server_port,
+    ) -> None:
+        self.router_port = router_port
+        self.req_server_port = req_server_port
+
+
 class ParallelConfig:
     """Configuration for the distributed execution.
 
