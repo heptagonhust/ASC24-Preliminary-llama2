@@ -77,7 +77,7 @@ class RouterManager:
         self.recv_from_req_server.bind(f"tcp://127.0.0.1:{router_port}")
 
         self.send_to_req_server = context.socket(zmq.PUSH)
-        self.send_to_req_server.bind(f"tcp://127.0.0.1:{req_port}")
+        self.send_to_req_server.connect(f"tcp://127.0.0.1:{req_port}")
 
         return
 
@@ -365,7 +365,8 @@ def start_router_process(
         router_max_new_token_len,
         router_port,
         req_port,
-        parallel_config_llama
+        parallel_config_llama,
+        pipe_writer
     ):
     '''Helper function to start router process.
 
@@ -380,19 +381,30 @@ def start_router_process(
         router_port: router的端口
         req_server_port: req_server的端口
     '''
-    router = RouterManager(
-        model_dir,
-        batch_size,
-        max_total_token_num,
-        max_req_num,
-        max_req_total_len,
-        router_token_ratio,
-        router_max_new_token_len,
-        router_port,
-        req_port,
-        parallel_config_llama
-    )
-    router.wait_to_model_ready()
+    try:
+        router = RouterManager(
+            model_dir,
+            batch_size,
+            max_total_token_num,
+            max_req_num,
+            max_req_total_len,
+            router_token_ratio,
+            router_max_new_token_len,
+            router_port,
+            req_port,
+            parallel_config_llama
+        )
+        router.wait_to_model_ready()
+    except Exception as e:
+        import traceback
+        import sys
+        etype, evalue, tb = sys.exc_info()
+        err_str = '\n'.join(traceback.format_exception(etype, evalue, tb))
+        pipe_writer.send(err_str)
+        raise
+    
+
+    pipe_writer.send('init ok')
     
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
