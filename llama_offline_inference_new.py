@@ -43,6 +43,7 @@ if __name__ == "__main__":
         start_funcs=[start_router_process],
         start_args=[(
             model_config_llama.model,
+            model_config_llama.hf_model_config,
             req_config.batch_size,
             req_config.max_total_token_num,
             req_config.max_req_num,

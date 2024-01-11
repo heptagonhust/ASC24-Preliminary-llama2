@@ -30,7 +30,7 @@ def _set_default_torch_dtype(dtype: torch.dtype):
 
 class ModelRpcServer():
 
-    def init_model(self, config: LlamaConfig, **kwargs):
+    def init_model(self, config: LlamaConfig, kwargs: Dict[str, any]):
         '''
         things need to be passed by kwargs:
         weight_dir: str
@@ -53,26 +53,27 @@ class ModelRpcServer():
 
         self.return_all_prompt_logprobs = kwargs.get("return_all_prompt_logprobs", False)
 
-        self.parallel_config = kwargs["parallel_config_llama"]
+        self.parallel_config: ParallelConfig = kwargs["parallel_config_llama"]
 
         self.cache : Dict[int, InferBatch] = {}
 
         weight_dir = kwargs["weight_dir"]
         max_total_token_num = kwargs["max_total_token_num"]
 
-        model_kvargs = {
+        model_kwargs = {
             "weight_dir": weight_dir,
             "max_total_token_num": max_total_token_num,
             "max_req_num": kwargs.get("max_req_num", 1000),
             "max_seq_length": kwargs.get("max_seq_length", 1024 * 5),
-            "return_all_prompt_logprobs": self.return_all_prompt_logprobs
+            "return_all_prompt_logprobs": self.return_all_prompt_logprobs,
+            "parallel_config_llama": self.parallel_config,
         }
 
         self._setup_distributed(self.parallel_config)
 
         self.dtype = kwargs.get("dtype", torch.float32)
         with _set_default_torch_dtype(self.dtype):
-            self.model = LlamaForCausalLM(config, **model_kvargs)
+            self.model = LlamaForCausalLM(config, **model_kwargs)
             self.model.to(device=device)
             self.model.load_weights(weight_dir)
         
@@ -170,7 +171,7 @@ class ModelRpcServer():
         self.cache[batch.batch_id] = batch
         return output_dict
     
-    def _setup_distributed(parallel_config_llama: ParallelConfig):
+    def _setup_distributed(self, parallel_config_llama: ParallelConfig):
         setup_distributed(parallel_config_llama)
     
     @torch.no_grad()

@@ -34,6 +34,7 @@ class RouterManager:
     def __init__(
             self,
             model_dir,
+            model_llama_config,
             batch_size,
             max_total_token_num,
             max_req_num,
@@ -63,6 +64,8 @@ class RouterManager:
             trust_remote_code=True
         )
 
+        self.model_llama_config = model_llama_config
+
         self.eos_id = self.tokenizer.eos_token_id
 
         self.prompt_cache_strs = []
@@ -83,7 +86,7 @@ class RouterManager:
 
     def wait_to_model_ready(self):
         # 初始化模型
-        kvargs = {
+        model_args = {
             "weight_dir" : self.weight_dir,
             "max_total_token_num" : self.max_total_token_num,
             "max_req_num" : self.max_req_num + 8, # 最大同时发起的请求数
@@ -91,7 +94,7 @@ class RouterManager:
             "return_all_prompt_logprobs" : False,
             "parallel_config_llama" : self.parallel_config_llama,
         }
-        self.model_rpc_server.init_model(kvargs)
+        self.model_rpc_server.init_model(self.model_llama_config, model_args)
 
         self._init_prompt_cache()
 
@@ -357,6 +360,7 @@ class RouterManager:
 
 def start_router_process(
         model_dir,
+        model_llama_config,
         batch_size,
         max_total_token_num,
         max_req_num,
@@ -372,6 +376,7 @@ def start_router_process(
 
     Args:
         model_dir: 模型路径
+        model_llama_config: llama 模型配置
         batch_size: 批处理最大的大小
         max_total_token_num: 模型最大长度
         max_req_num: 同时到来的最大请求数
@@ -384,6 +389,7 @@ def start_router_process(
     try:
         router = RouterManager(
             model_dir,
+            model_llama_config,
             batch_size,
             max_total_token_num,
             max_req_num,
