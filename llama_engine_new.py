@@ -79,7 +79,7 @@ class RequestEngine():
         sampling_params = self.sampling_params
         sampling_params.max_tokens = output_len
 
-        logger.info(f"sending request_id:{request_id}, output_len:{output_len}")
+        # logger.info(f"sending request_id:{request_id}, output_len:{output_len}")
         self.send_to_router.send_pyobj((request_id, prompt_ids, sampling_params, 0, None))
 
     async def handler(self, request_num):

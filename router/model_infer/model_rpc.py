@@ -71,7 +71,7 @@ class ModelRpcServer():
 
         self._setup_distributed(self.parallel_config)
 
-        self.dtype = kwargs.get("dtype", torch.float32)
+        self.dtype = kwargs.get("dtype", torch.float16)
         with _set_default_torch_dtype(self.dtype):
             self.model = LlamaForCausalLM(config, **model_kwargs)
             self.model.to(device=device)

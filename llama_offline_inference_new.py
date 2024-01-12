@@ -23,7 +23,7 @@ if __name__ == "__main__":
     LLama = RequestEngine(model_config_llama, parallel_config_llama, port_config, sampling_params, req_config)
     with open('./scrambled_sampled_dataset.json') as f:
         requests = json.load(f)
-    requests = requests[:1000]
+    requests = requests[:500]
 
 
     '''

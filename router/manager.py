@@ -131,7 +131,7 @@ class RouterManager:
         prompt_cache_len, 
         prompt_cache_req_id
     ):
-        logger.info(f"add_req: {request_id}")
+        # logger.info(f"add_req: {request_id}")
         req = NormalReq(request_id, prompt_ids, sampling_params,
                             prompt_cache_len, prompt_cache_req_id)
         self.req_queue.append(req)
@@ -183,7 +183,7 @@ class RouterManager:
         if self.running_batch is None:
             new_batch = self.req_queue.generate_new_batch(self.running_batch)
             if new_batch is not None:
-                logger.info(f"new_batch: {new_batch.batch_id}, requests: {[r.request_id for r in new_batch.reqs]}")
+                logger.info(f"new_batch: {new_batch.batch_id}, requests count: {len(new_batch.reqs)}")
                 self.running_batch = new_batch
                 self._prefill_batch(self.running_batch)
                 self._filter_running_batch()

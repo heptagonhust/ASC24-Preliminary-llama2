@@ -5,6 +5,9 @@ from typing import List, Dict
 
 from router.model_infer.infer_batch import requests_mapping, InferReq, InferBatch
 from router.io_struct import ReqRunStatus
+from utils.log_utils import init_logger
+
+logger = init_logger(__name__)
 
 #@calculate_time(show=True, min_cost_ms=1)
 def prepare_prefill_inputs(batch: InferBatch):
@@ -47,12 +50,17 @@ def prepare_prefill_inputs(batch: InferBatch):
         nopad_b_req_idx = torch.tensor(nopad_b_req_idx, dtype=torch.int32, device='cuda')
         nopad_b_start_loc = torch.tensor(nopad_b_start_loc, dtype=torch.int32, device='cuda')
         nopad_b_seq_len = torch.tensor(nopad_b_seq_len, dtype=torch.int32, device='cuda')
+        b_seq_len_numpy = nopad_b_seq_len.cpu().numpy()
+
+        logger.info(f"nopad_b_seq_len: {nopad_b_seq_len}\nnopad_b_start_loc: {nopad_b_start_loc}\nnopad_b_req_idx: {nopad_b_req_idx}")
+
         kwargs = {
             "batch_size": len(batch),
             "total_token_num": nopad_total_token_num,
             "max_len_in_batch": nopad_max_len_in_batch,
             "input_ids": input_ids,
-            "positions": nopad_b_seq_len,  # reuse b_seq_len
+            "positions": torch.from_numpy(np.concatenate([np.arange(0, b_seq_len_numpy[i])
+                                            for i in range(len(b_seq_len_numpy))], axis=0)).cuda(),
             "b_req_idx": nopad_b_req_idx,
             "b_start_loc": nopad_b_start_loc,
             "b_seq_len": nopad_b_seq_len,
@@ -99,7 +107,7 @@ def prepare_decode_inputs(batch:InferBatch):
             "total_token_num": nopad_total_token_num,
             "max_len_in_batch": nopad_max_len_in_batch,
             "input_ids": input_ids,
-            "positions": nopad_b_seq_len,  # reuse b_seq_len
+            "positions": nopad_b_seq_len - 1,  # TODO: fix it
             "b_req_idx": nopad_b_req_idx,
             "b_start_loc": nopad_b_start_loc,
             "b_seq_len": nopad_b_seq_len,
