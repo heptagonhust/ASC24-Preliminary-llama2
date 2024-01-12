@@ -14,6 +14,9 @@ import zmq
 import zmq.asyncio
 import asyncio
 
+from utils.log_utils import init_logger
+
+logger = init_logger(__name__)
 
 
 class RouterManager:
@@ -122,12 +125,13 @@ class RouterManager:
 
     def add_req(
         self,
+        request_id: int,
         prompt_ids: List[int],
         sampling_params: SamplingParams,
-        request_id: str,
         prompt_cache_len, 
         prompt_cache_req_id
-    ):  
+    ):
+        logger.info(f"add_req: {request_id}")
         req = NormalReq(request_id, prompt_ids, sampling_params,
                             prompt_cache_len, prompt_cache_req_id)
         self.req_queue.append(req)
@@ -150,8 +154,9 @@ class RouterManager:
             del self.req_id_to_out[request_id]
         return
 
-    def loop_for_fwd(self,):
+    async def loop_for_fwd(self,):
         counter_count = 0
+        logger.info("start loop_for_fwd")
         while True:
             self._step()
             counter_count += 1
@@ -164,6 +169,9 @@ class RouterManager:
                         f"paused req num: {len(self.req_queue.pause_req_dict)} "
                         f"token used ratio: {token_ratio} "
                     )
+            
+            if self.running_batch is None:
+                await asyncio.sleep(0.01)  # 10ms
                 
 
     def _step(self):
@@ -175,6 +183,7 @@ class RouterManager:
         if self.running_batch is None:
             new_batch = self.req_queue.generate_new_batch(self.running_batch)
             if new_batch is not None:
+                logger.info(f"new_batch: {new_batch.batch_id}, requests: {[r.request_id for r in new_batch.reqs]}")
                 self.running_batch = new_batch
                 self._prefill_batch(self.running_batch)
                 self._filter_running_batch()
@@ -208,7 +217,7 @@ class RouterManager:
         return
 
     def _init_batch(self, batch: Batch):
-        reqs = [r.to_rpc_obj() for r in batch.reqs]
+        reqs = batch.reqs
         ret = self.model_rpc_server.add_batch(batch.batch_id, reqs, "fp16")
         req_to_req_status = ret
         
@@ -216,7 +225,7 @@ class RouterManager:
         return
 
     def _prefill_batch(self, batch:Batch):
-        self.model_rpc_server.add_batch(batch)
+        self._init_batch(batch)
         # 在 非 splitfuse 模式下，才需要真的执行 prefill 的操作。
         ret = self.model_rpc_server.prefill_batch(batch.batch_id)
         req_to_out_status = ret
@@ -236,7 +245,8 @@ class RouterManager:
 
         self._update_out_status_to_batch(batch, req_to_out_status)
         unfinished_req_ids, finished_req_ids = batch.mark_and_get_finished_req_and_preupdate_status(self.eos_id)
-        # self._send_to_detokenization_proc(batch, req_to_out_status)
+        detokenize_res = self._detokenize(batch, req_to_out_status)
+        self.send_to_req_server(detokenize_res)
         batch.filter_out_finished_req(unfinished_req_ids, finished_req_ids)
         self._handle_finish_req(batch, unfinished_req_ids, finished_req_ids)
         return

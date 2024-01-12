@@ -1,5 +1,9 @@
 import torch
 
+from utils.log_utils import init_logger
+
+logger = init_logger(__name__)
+
 class MemoryManager:
     def __init__(self, size, dtype, head_num, head_dim, layer_num, always_copy=False):
         self.size = size        
@@ -16,6 +20,7 @@ class MemoryManager:
         self._init_buffers(size, dtype, head_num, head_dim, layer_num)
         
     def _init_buffers(self, size, dtype, head_num, head_dim, layer_num):
+        logger.info(f'memory_manager: init buffers size {size} dtype {dtype} head_num {head_num} head_dim {head_dim} layer_num {layer_num}')
         self.value_buffer = [torch.empty((size, head_num, head_dim), dtype=dtype, device="cuda") for _ in range(layer_num)]
         self.key_buffer = [torch.empty((size, head_num, head_dim), dtype=dtype, device="cuda") for _ in range(layer_num)]
         

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict
 from manager.request_manager import RequestManager
 from manager.memory_manager import MemoryManager
-from router.io_struct import ReqRunStatus
+from router.io_struct import Req, ReqRunStatus
 
 
 requests_mapping = {}
@@ -74,36 +74,43 @@ class InferBatch:
     
     @classmethod
     @torch.no_grad()
-    def init_batch(cls, batch_id, requests, dtype: torch.dtype, device: torch.device, req_manager:RequestManager, vocab_size: int):
+    def init_batch(cls, batch_id, requests: List[Req], dtype: torch.dtype, device: torch.device, req_manager:RequestManager, vocab_size: int):
 
         request_ids = []
-        need_alloc_size = len([r for r in requests if r['request_id'] not in requests_mapping])
+        need_alloc_size = len([r for r in requests if r.request_id not in requests_mapping])
         nopad_b_req_idx = req_manager.alloc(need_alloc_size)
         nopad_b_req_idx = nopad_b_req_idx.cpu().numpy()
         
         index = 0
         for r in requests:
             # request id -> idx in list mapping
-            r_id = r['request_id']
+            r_id = r.request_id
 
             if r_id not in requests_mapping.keys():
-                tokenized_input = r['input_id']
+                tokenized_input = r.prompt_ids
                 input_length = len(tokenized_input)
                 # postprocessor
-                sampling_param = r["sampling_param"]
-                multimodal_params = r["multimodal_params"]
-                sampling_param["vocab_size"] = vocab_size
-                assert r['req_status'] == ReqRunStatus.WAIT_IN_QUEUE
+                sampling_param = r.sample_params
+                multimodal_params = None
+                assert r.req_status == ReqRunStatus.WAIT_IN_QUEUE
                 r_obj = InferReq(r_id, 
                                 input_token_ids=tokenized_input,
                                 out_token_id_count=collections.defaultdict(int), 
-                                sampling_param=InferSamplingParams(**sampling_param), 
+                                sampling_param=InferSamplingParams(
+                                    presence_penalty=sampling_param.presence_penalty,
+                                    frequency_penalty=sampling_param.frequency_penalty,
+                                    repetition_penalty=sampling_param.repetition_penalty,
+                                    temperature=sampling_param.temperature,
+                                    top_p=sampling_param.top_p,
+                                    top_k=sampling_param.top_k,
+                                    vocab_size=vocab_size,
+                                ), 
                                 multimodal_params=multimodal_params,
                                 req_idx=nopad_b_req_idx[index], 
                                 prompt_len=input_length,
-                                req_status=r['req_status'],
-                                prompt_cache_len=r['prompt_cache_len'],
-                                prompt_cache_req_id=r['prompt_cache_req_id'])
+                                req_status=r.req_status,
+                                prompt_cache_len=r.prompt_cache_len,
+                                prompt_cache_req_id=r.prompt_cache_req_id)
                 requests_mapping[r_id] = r_obj
                 index += 1
             else:

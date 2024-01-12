@@ -35,7 +35,7 @@ class Req:
         return {"request_id": self.request_id,
                 "input_id": self.prompt_ids,
                 "output_len": self.max_output_len,
-                "sampling_param": self.sample_params.to_dict(),
+                "sampling_param": self.sample_params,
                 "prompt_cache_len": self.prompt_cache_len,
                 "prompt_cache_req_id": self.prompt_cache_req_id,
                 "req_status": self.req_status}
@@ -161,8 +161,8 @@ class Batch:
     def mark_and_get_finished_req_and_preupdate_status(self, eos_id):
         unfinished_req_ids, finished_req_ids = [], []
         for req in self.reqs:
-            if req.stop_sequences_matched():
-                req.has_generate_finished = True
+            # if req.stop_sequences_matched():
+            #     req.has_generate_finished = True
             if len(req.output_ids) >= 1 and req.output_ids[-1] == eos_id and req.sample_params.ignore_eos == False:
                 req.has_generate_finished = True
             if len(req.output_ids) >= req.max_output_len or req.aborted:

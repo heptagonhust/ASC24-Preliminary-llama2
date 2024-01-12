@@ -1,7 +1,7 @@
 import sys
 import os
 import signal
-import torch.multiprocessing as mp
+import multiprocessing as mp
 from typing import List
 
 
@@ -32,6 +32,7 @@ def start_submodule_processes(start_funcs=[], start_args=[]):
             print(f"init func {start_funcs[index].__name__} : {str(init_state)}")
     
     assert all([proc.is_alive() for proc in processes])
+    map(lambda p: p.join(), processes)
     return [proc.pid for proc in processes]
 
 def kill_submodule_processes(pids):
