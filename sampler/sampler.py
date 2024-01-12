@@ -57,12 +57,14 @@ class Sampler(nn.Module):
         embedding_bias: Optional[torch.Tensor] = None,
     ) -> SamplerOutput:
         # Get the hidden states that we use for sampling.
+        #! get a 2-D tensor of shape (sample_token_num, hidden_size)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1]).index_select(
                                             0, sampling_metadata.selected_token_indices)
 
         # Get the logits for the next tokens.
         #! projection from hidden_states of last generated token to logits of token
         #! using weight in ParallelLMHead
+        #! shape: (sample_token_num, vocab_size)
         logits = _get_logits(hidden_states, embedding, embedding_bias,
                              self.vocab_size)
 
@@ -99,9 +101,11 @@ class Sampler(nn.Module):
 
         # We use float32 for probabilities and log probabilities.
         # Compute the probabilities.
+        #! shape: (sample_token_num, vocab_size)
         probs = torch.softmax(logits, dim=-1, dtype=torch.float)
         # Compute the log probabilities.
         # Use log_softmax to ensure numerical stability.
+        #! shape: (sample_token_num, vocab_size)
         logprobs = torch.log_softmax(logits, dim=-1, dtype=torch.float)
 
         # Sample the next tokens.
@@ -109,9 +113,6 @@ class Sampler(nn.Module):
         # Get the logprobs query results.
         prompt_logprobs, sample_logprobs = _get_logprobs(
             logprobs, sampling_metadata, sample_results)
-        # sample_results = []
-        # prompt_logprobs = []
-        # sample_logprobs = []
         return _build_sampler_output(sample_results, sampling_metadata,
                                      prompt_logprobs, sample_logprobs)
 
@@ -297,11 +298,13 @@ def _random_sample(
     random_samples: torch.Tensor,
 ) -> List[Tuple[List[int], List[int]]]:
     # Find the maximum best_of value of the prompt phase requests.
+    #! shape: (sample_seq_num, vocab_size)
     random_samples = random_samples.cpu()
     sample_idx = 0
     results = []
     for seq_group, is_prompt in zip(selected_seq_groups, is_prompts):
         seq_ids, sampling_params = seq_group
+        #! num of seq in a seq_group
         num_parent_seqs = len(seq_ids)
         if is_prompt:
             # Prompt phase.
@@ -315,6 +318,9 @@ def _random_sample(
                                             num_parent_seqs, 0].tolist()
         results.append((next_token_ids, parent_ids))
         sample_idx += num_parent_seqs
+    #! result type: List[Tuple[List[int], List[int]]]
+    #! results shape: sample_seq_num, (seq_num in seq_group, seq_num in seq_group)
+    #!      in our case: batch_size, (1, 1)
     return results
 
 
@@ -415,7 +421,8 @@ def _sample(
     # Counterintiutively, having two loops here is actually faster.
     # The first loop can run without waiting on GPU<->CPU sync.
     for sampling_type in SamplingType:
-        #! token index of seqs to be sampled belongs to this category
+        #! token index in all the seqs tokens to be sampled that 
+        #!      belongs to this category
         sample_indices = categorized_sample_indices[sampling_type]
         num_tokens = len(sample_indices)
         if num_tokens == 0:
@@ -435,7 +442,7 @@ def _sample(
                 if is_prompt:
                     _, sampling_params = seq_group
                     max_best_of = max(max_best_of, sampling_params.best_of)
-            #! prob: Tensor(sample_seq_len, token_space_size)
+            #! multinomial_samples: Tensor(sample_token_num, vocab_size)
             multinomial_samples = _multinomial(probs[sample_indices],
                                                max_best_of)
         elif sampling_type == SamplingType.BEAM:
@@ -453,6 +460,10 @@ def _sample(
         if sampling_type == SamplingType.GREEDY:
             sample_results = _greedy_sample(seq_groups, greedy_samples)
         elif sampling_type == SamplingType.RANDOM:
+            #! seq_groups: all seq groups belongs to this type
+            #! sample_result: List[(next_token_id, parent_id))]
+            #!      parent_id: seq index in a seq_group
+            #! sample_result shape: (seq_num of this type, (1, 1))
             sample_results = _random_sample(seq_groups, is_prompts,
                                             multinomial_samples)
         elif sampling_type == SamplingType.BEAM:
@@ -465,6 +476,7 @@ def _sample(
         sample_results_dict[i]
         for i in range(len(sampling_metadata.seq_groups))
     ]
+    #! shape: (seq_num in batch, (seqs_in_seqgroup, seqs_in_seqgroup))
     return sample_results
 
 
@@ -589,6 +601,9 @@ def _build_sampler_output(
     sample_logprobs: List[SampleLogprobs],
 ) -> SamplerOutput:
     sampler_output = []
+    #! sampler_output: List[SequenceGroupOutput]
+    #! SequenceGroupOutput: Tuple[List[SequenceOutput], Optional[PromptLogprobs]]
+    #! SequenceOutput: Tuple[parent_seq_id, output_token, logprobs]
     for (seq_group, sample_result, group_prompt_logprobs,
          group_sample_logprobs) in zip(sampling_metadata.seq_groups,
                                        sample_results, prompt_logprobs,

@@ -26,13 +26,7 @@ class ParallelConfig:
         self.world_size = pipeline_parallel_size * tensor_parallel_size
         if self.world_size > 1:
             self.worker_use_ray = True
-        self._verify_args()
 
-    def _verify_args(self) -> None:
-        if self.pipeline_parallel_size > 1:
-            raise NotImplementedError(
-                "Pipeline parallelism is not supported yet.")
-            
 
 class ModelConfig:
     def __init__(
