@@ -87,7 +87,9 @@ class RequestEngine():
         handle the request from the router
         '''
         while request_num > 0:
-            req_id, out_ids, out_metadata, finished = await self.recv_from_router.recv_pyobj()
+            batch_str_out = await self.recv_from_router.recv_pyobj()
+            logger.info(f"batch_str_out: {batch_str_out}")
+            req_id, out_ids, out_metadata, finished = batch_str_out
             logger.info(f"req_id:{req_id}, out_ids:{out_ids}, out_metadata:{out_metadata}, finished:{finished}")
             async with self.req_id_to_out_map_lock:
                 req_status = self.req_id_to_out_map[req_id]

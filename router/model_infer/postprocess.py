@@ -5,6 +5,10 @@ from router.model_infer.infer_batch import InferBatch
 import triton
 import triton.language as tl
 
+from utils.log_utils import init_logger
+
+logger = init_logger(__name__)
+
 @triton.jit
 def _fwd_kernel_apply_penalty(
     Logits, presence_penalty, freqency_penalty, repetition_penalty,
@@ -59,6 +63,9 @@ def sample(logits, reqs):
     presence_penalties, frequency_penalties, repetition_penalties, temperatures, top_ps, top_ks, p_token_ids, p_token_counts, p_cumsum_seq_len, p_max_len_in_batch = _get_post_sample_tensors(reqs)
 
     apply_penalty(logits, presence_penalties, frequency_penalties, repetition_penalties, p_token_ids, p_token_counts, p_cumsum_seq_len, p_max_len_in_batch) 
+    
+    logger.info(f"logits: {logits.shape}, temperature: {temperatures.shape}, top_p: {top_ps}, top_k: {top_ks}")
+
     logits.div_(temperatures.view((-1, 1)))
     probs = torch.softmax(logits, dim=-1)
     probs_sort, probs_idx = _top_p_top_k(probs, top_ps, top_ks)

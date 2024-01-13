@@ -234,7 +234,7 @@ class RouterManager:
         unfinished_req_ids, finished_req_ids = batch.mark_and_get_finished_req_and_preupdate_status(self.eos_id)
         # self._send_to_detokenization_proc(batch, req_to_out_status)
         detokenize_res = self._detokenize(batch, req_to_out_status)
-        self.send_to_req_server(detokenize_res)
+        self.send_to_req_server.send_pyobj(detokenize_res)
         batch.filter_out_finished_req(unfinished_req_ids, finished_req_ids)
         self._handle_finish_req(batch, unfinished_req_ids, finished_req_ids)
         return
@@ -246,7 +246,8 @@ class RouterManager:
         self._update_out_status_to_batch(batch, req_to_out_status)
         unfinished_req_ids, finished_req_ids = batch.mark_and_get_finished_req_and_preupdate_status(self.eos_id)
         detokenize_res = self._detokenize(batch, req_to_out_status)
-        self.send_to_req_server(detokenize_res)
+        logger.info(f"detokenize_res: {detokenize_res}")
+        self.send_to_req_server.send_pyobj(detokenize_res)
         batch.filter_out_finished_req(unfinished_req_ids, finished_req_ids)
         self._handle_finish_req(batch, unfinished_req_ids, finished_req_ids)
         return

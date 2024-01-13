@@ -24,6 +24,7 @@
 # limitations under the License.
 """Inference-only LLaMA model compatible with HuggingFace weights."""
 from typing import Any, Dict, List, Optional, Tuple
+import einops
 
 import torch
 import os
@@ -322,6 +323,7 @@ class LlamaForCausalLM(nn.Module):
         self.linear_method = None
         self.model = LlamaModel(config, self.linear_method)
         self.lm_head = ParallelLMHead(config.vocab_size, config.hidden_size)
+        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.sampler = Sampler(config.vocab_size)
         self.tp_rank = get_tensor_model_parallel_rank()
         self.world_size = dist.get_world_size()
@@ -445,6 +447,9 @@ class LlamaForCausalLM(nn.Module):
         infer_state.init_some_extra_state(self, input_ids)
         
         hidden_states = self.model(input_ids,positions,infer_state,input_metadata)
+
+        hidden_states = self.postlayer_get_embedding(hidden_states, infer_state, return_logits=False)
+
         return hidden_states
     
     def _decode(self, batch_size, total_token_num, max_len_in_batch, input_ids, b_req_idx, b_start_loc, b_seq_len, multimodal_params,positions,input_metadata):
@@ -480,6 +485,8 @@ class LlamaForCausalLM(nn.Module):
         infer_state.init_some_extra_state(self, input_ids)
         # hidden_state = self._token_forward(input_ids, infer_state)
         hidden_states = self.model(input_ids, positions, infer_state, input_metadata)
+
+        hidden_states = self.postlayer_get_embedding(hidden_states, infer_state, return_logits=False)
         
         return hidden_states
     
@@ -496,7 +503,7 @@ class LlamaForCausalLM(nn.Module):
         is_prefill: bool,
         # kv_caches: List[KVCache],
         input_metadata: InputMetadata,
-    )    -> torch.Tensor:
+    ) -> torch.Tensor:
         
         print("LlamaForCausalLM forwarding")
 
@@ -539,6 +546,54 @@ class LlamaForCausalLM(nn.Module):
         next_tokens = self.sampler(self.lm_head.weight, hidden_states,
                                    sampling_metadata)
         return next_tokens
+    
+    def _slice_get_last_input(self, input_embdings: torch.Tensor, infer_state: LlamaInferStateInfo):
+        if infer_state.is_prefill and not infer_state.return_all_prompt_logprobs:
+            batch_size = infer_state.batch_size
+            last_input = torch.empty((batch_size, input_embdings.shape[-1]),
+                                     device=input_embdings.device,
+                                     dtype=torch.float16)
+            last_index = torch.cumsum(infer_state.b_seq_len, dim=0, dtype=torch.long) - 1
+            last_input[:, :] = input_embdings[0, last_index, :]
+            return last_input, batch_size
+
+        if infer_state.is_prefill and infer_state.return_all_prompt_logprobs:
+            total_tokens = infer_state.total_token_num
+            return input_embdings, total_tokens
+        
+        if not infer_state.is_prefill:
+            batch_size = infer_state.batch_size
+            return input_embdings[0, -batch_size:, :], batch_size
+        
+        assert False, "Error State"
+    
+    def postlayer_get_embedding(
+        self,
+        input_embedding: torch.Tensor,
+        infer_state: LlamaInferStateInfo,
+        return_logits: bool
+    ) -> torch.Tensor:
+        logger.info(f"input_embdings: {input_embedding.shape}")
+        last_input, token_num = self._slice_get_last_input(input_embedding, infer_state)
+        logger.info(f"last_input: {last_input.shape}")
+        input_embedding = None
+        last_input = self.norm(last_input)
+        last_input = einops.rearrange(last_input, "batch embed_dim -> embed_dim batch").contiguous().reshape(-1, token_num)
+        logic_batch = torch.mm(self.lm_head.weight, last_input)
+        gather_data = logic_batch
+
+        logic_batch = None
+
+        print(f"gather_data: {gather_data.shape}")
+
+        if not return_logits:
+            prob_out = torch.softmax(gather_data.permute(1, 0).float(), dim=-1)
+            gather_data = None
+            return prob_out
+        else:
+            ans_logits = gather_data.permute(1, 0).float()
+            gather_data = None
+            return ans_logits
 
     def load_weights(self,
                      model_name_or_path: str,
