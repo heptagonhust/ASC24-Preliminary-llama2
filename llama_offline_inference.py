@@ -5,11 +5,11 @@ import json
 
 
 if __name__ == "__main__":
-    model_config_llama = ModelConfig("/data/7B-chat-hf", "/data/7B-chat-hf", True, 1, None)
-    parallel_config_llama = ParallelConfig(pipeline_parallel_size = 1, tensor_parallel_size = 1)
+    model_config_llama = ModelConfig("/data_local/70B-hf", "/data_local/70B-hf", True, 1, None)
+    parallel_config_llama = ParallelConfig(pipeline_parallel_size = 1, tensor_parallel_size = 4)
     LLama = LLamaEngine(model_config_llama,parallel_config_llama)
     with open('./scrambled_sampled_dataset.json') as f:
         requests = json.load(f)
-    requests = requests[2:3]
+    # requests = requests[]
     sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
     LLama.generate(requests, sampling_params=sampling_params)

@@ -40,7 +40,7 @@ class LLamaEngine():
         with _set_default_torch_dtype(model_config.dtype):
             model = LlamaForCausalLM(
                 model_config.hf_model_config,
-                weight_dir="/data/7B-chat-hf",
+                weight_dir="/data_local/70B-hf",
                 max_total_token_num=2048, # TODO:确定真实值？
                 max_req_num=1
                                      )  
@@ -85,48 +85,25 @@ class LLamaEngine():
         position = torch.arange(0, seq.get_len())
         seq_token_ids = seq.get_token_ids()
         seq_token_ids = torch.tensor(seq_token_ids, dtype=torch.long, device=self.device)
-        # print(seq_token_ids.shape[0])
-        # print(total_token_num)
         hidden_state = self.model(batch_size,total_token_num,input_len,seq_token_ids,position,b_req_idx,b_start_loc,b_seq_len,True,None)
-        # print('first hidden_state:')
-        # print(hidden_state.shape)
         sample_output = self.model.sample(hidden_state, sampling_metadata)
         new_token_id = sample_output[-1].samples[-1].output_token
         tokens_logprob = sample_output[-1].samples[-1].logprobs
         seq.append_token_id(new_token_id, tokens_logprob)
-        logging.info(f"new token id: {new_token_id}")
 
 
         for i in range(max_output_len):
-            # print(f"iterator: {i}")
-            logging.info(f"iterator: {i}")
             sampling_metadata = _prepare_sample(seq, sampling_params, prompt_run=False)
-
             position = torch.tensor(range(seq.get_len()))
-            # seq_token_ids = seq.get_token_ids()
-            # seq_token_ids = torch.tensor(seq_token_ids, dtype=torch.long, device=self.device)
+            b_seq_len += 1
             new_token_id_tensor = torch.tensor([new_token_id], dtype=torch.long, device=self.device)
-            # TODO:修改传入参数
-            # print('new_token_id_tensor:')
-            # print(new_token_id_tensor.shape)
             hidden_state = self.model(batch_size, total_token_num, input_len + i + 1,
                                       new_token_id_tensor, position, b_req_idx,
                                       b_start_loc, b_seq_len, False, None)
-            # hidden_state = self.model(seq_token_ids, position, None, None)
-            # print('second hidden_state:')
-            # print(hidden_state.shape)
-            # torch.set_printoptions(threshold=10000)
-            print('decode hidden_state:')
-            print(hidden_state)
-            print(hidden_state.shape)
             sample_output = self.model.sample(hidden_state, sampling_metadata)
             new_token_id = sample_output[-1].samples[-1].output_token
             tokens_logprob = sample_output[-1].samples[-1].logprobs
             seq.append_token_id(new_token_id, tokens_logprob)            
-            logging.info(f"new token id: {new_token_id}")
-            print('new_token_id')
-            print(new_token_id)
-
             if (seq.get_last_token_id() == self.tokenizer.eos_token_id):
                 break
 
