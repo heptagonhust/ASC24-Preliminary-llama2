@@ -58,13 +58,8 @@ class Sampler(nn.Module):
     ) -> SamplerOutput:
         # Get the hidden states that we use for sampling.
         
-        print('before sample hidden_states:')
-        print(hidden_states.shape)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1]).index_select(
                                             0, sampling_metadata.selected_token_indices)
-
-        print('sample hidden_states:')
-        print(hidden_states.shape)
 
         # Get the logits for the next tokens.
         #! projection from hidden_states of last generated token to logits of token
@@ -84,6 +79,7 @@ class Sampler(nn.Module):
          do_min_p) = SamplingTensors.from_sampling_metadata(
              sampling_metadata, vocab_size, logits.device, logits.dtype)
 
+        do_penalties = True
         # Apply presence and frequency penalties.
         if do_penalties:
             logits = _apply_penalties(logits, sampling_tensors.prompt_tokens,
@@ -106,19 +102,16 @@ class Sampler(nn.Module):
         # We use float32 for probabilities and log probabilities.
         # Compute the probabilities.
         probs = torch.softmax(logits, dim=-1, dtype=torch.float)
+        probs2 = probs.sort()
+        print('probs:')
+        print(probs2)
         # Compute the log probabilities.
         # Use log_softmax to ensure numerical stability.
         logprobs = torch.log_softmax(logits, dim=-1, dtype=torch.float)
 
-        print('probs:')
-        print(probs.shape)
-        print('logprobs:')
-        print(logprobs.shape)
 
         # Sample the next tokens.
         sample_results = _sample(probs, logprobs, sampling_metadata)
-        print('sample_results:')
-        print(sample_results)
         
         # Get the logprobs query results.
         prompt_logprobs, sample_logprobs = _get_logprobs(
@@ -404,16 +397,7 @@ def _multinomial(
                                          probs.shape[1]).contiguous().view(
                                              -1, probs.shape[1])
     q = torch.empty_like(probs).exponential_(1)
-    
-    print('probs:')
-    print(probs.shape)
-    print('q:')
-    print(q.shape)
-    
     results = probs.div_(q).argmax(dim=1).view(-1, num_samples)
-    print('results:')
-    print(results.shape)
-    print(results)
     return results
 
 
@@ -460,8 +444,6 @@ def _sample(
                     _, sampling_params = seq_group
                     max_best_of = max(max_best_of, sampling_params.best_of)
             #! prob: Tensor(sample_seq_len, token_space_size)
-            print('before multinomial:')
-            print(probs[sample_indices].shape)
             multinomial_samples = _multinomial(probs[sample_indices],
                                                max_best_of)
             
@@ -471,9 +453,6 @@ def _sample(
             raise ValueError(f"Unsupported sampling type: {sampling_type}")
 
     # GPU<->CPU sync happens in the loop below.
-
-    print('after multinomial:')
-    print(multinomial_samples.shape)
 
     for sampling_type in SamplingType:
         if sampling_type not in sample_metadata:

@@ -9,6 +9,12 @@ class MemoryManager:
         self.layer_num = layer_num
         self.always_copy = always_copy
         
+        print('init mem buffer:')
+        print(size)
+        print(head_num)
+        print(head_dim)
+        print(layer_num)
+        
         # mem_state 修改为使用计数方式，方便后期实现token共享机制，实现beam search 等
         self.mem_state = torch.zeros((size,), dtype=torch.int32, device="cuda")
         self.indexes = torch.arange(0, size, dtype=torch.long, device="cuda")
@@ -16,8 +22,8 @@ class MemoryManager:
         self._init_buffers(size, dtype, head_num, head_dim, layer_num)
         
     def _init_buffers(self, size, dtype, head_num, head_dim, layer_num):
-        self.value_buffer = [torch.empty((size, head_num, head_dim), dtype=dtype, device="cuda") for _ in range(layer_num)]
-        self.key_buffer = [torch.empty((size, head_num, head_dim), dtype=dtype, device="cuda") for _ in range(layer_num)]
+        self.value_buffer = [torch.zeros((size, head_num, head_dim), dtype=dtype, device="cuda") for _ in range(layer_num)]
+        self.key_buffer = [torch.zeros((size, head_num, head_dim), dtype=dtype, device="cuda") for _ in range(layer_num)]
         
     def _free_buffers(self):
         self.key_buffer = None
@@ -25,6 +31,8 @@ class MemoryManager:
         
     @torch.no_grad()
     def alloc(self, need_size):
+        print('alloc:')
+        print(need_size)
         if need_size > self.can_use_mem_size:
             print('memory_manager: no memory space to alloc')
             return None
@@ -35,6 +43,8 @@ class MemoryManager:
     
     @torch.no_grad()
     def alloc_contiguous(self, need_size):
+        print('alloc_contiguous:')
+        print(need_size)
         if self.always_copy:
             return None
         if need_size > self.can_use_mem_size:

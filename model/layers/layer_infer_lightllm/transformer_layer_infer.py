@@ -10,6 +10,11 @@ from model.layers.triton_kernel.rotary_emb import rotary_emb_fwd
 from model.layers.embedding import RotaryEmbedding
 from functools import partial
 import torch.nn as nn
+from ..triton_kernel.rotary_emb import rotary_emb_fwd
+
+import logging
+logging.basicConfig(filename='example.log', level=logging.INFO, 
+                    format='%(asctime)s %(levelname)s: %(message)s')
 
 class BaseLayerInfer(nn.Module):
 
@@ -53,6 +58,10 @@ class TransformerLayerInferTpl(TransformerLayerInfer):
         if infer_state.mem_is_contiguous:
             cache_k = infer_state.mem_manager.key_buffer[self.layer_num_][infer_state.mem_start:infer_state.mem_end, :, :]
             cache_v = infer_state.mem_manager.value_buffer[self.layer_num_][infer_state.mem_start:infer_state.mem_end, :, :]
+            print('panjinzhe!!!!')
+            print(cache_k.shape)
+            print(cache_v.shape)
+            
         else:
             cache_k = infer_state.key_buffer
             cache_v = infer_state.value_buffer 
@@ -70,23 +79,8 @@ class TransformerLayerInferTpl(TransformerLayerInfer):
         '''
         copy k, v we generated in "qkv_proj" to cache_k, cache_v
         '''
-        # 只选取k的第一维中的最后一个元素
-        # TODO:改回来
-        print('k:')
-        print(k.shape)
-        k_last = k[:, -1:, :]        
-        print('k_last:')
-        print(k_last.shape)
-
-        # 确保形状正确
-        k_view = k_last.view(-1, self.tp_k_head_num_ * self.head_dim_)
-        cache_k_view = cache_k.view(-1, self.tp_k_head_num_ * self.head_dim_)
-        print(f"k_view_shape:{k_view.shape}, cache_k_view_shape:{cache_k_view.shape}")
-        
-        # 执行复制操作
-        cache_k_view.copy_(k_view)
+        cache_k.view(-1, self.tp_k_head_num_ * self.head_dim_).copy_(k.view(-1, self.tp_k_head_num_ * self.head_dim_))
         cache_v.view(-1, self.tp_v_head_num_ * self.head_dim_).copy_(v.view(-1, self.tp_v_head_num_ * self.head_dim_))
-
         return
     
     def _post_cache_kv(self, cache_k, cache_v, infer_state:InferStateInfo):
@@ -116,10 +110,6 @@ class TransformerLayerInferTpl(TransformerLayerInfer):
 
     def _token_attention(self, q, k, v, infer_state: InferStateInfo):
         cache_k, cache_v = self._pre_cache_kv(infer_state)
-        print('cache_k')
-        print(cache_k.shape)
-        print('cache_v')
-        print(cache_v.shape)
         self._copy_kv_to_kvcache_decode(k, v, cache_k, cache_v)
         self._post_cache_kv(cache_k, cache_v, infer_state)
         o = self._token_attention_kernel(q, infer_state)
@@ -133,17 +123,17 @@ class TransformerLayerInferTpl(TransformerLayerInfer):
         o = self._token_attention(q, k, v, infer_state)
         return o
     
-    def forward(self, q, k, v, infer_state: InferStateInfo):
+    def forward(self, q, k, v, infer_state: LlamaInferStateInfo):
+        # print('panjinzhe2')
+        # print(k.view(-1,self.tp_k_head_num_,self.head_dim_).shape)
+        # rotary_emb_fwd(q.view(-1,self.tp_q_head_num_,self.head_dim_),infer_state.position_cos,infer_state.position_sin)
+        # rotary_emb_fwd(k.view(-1,self.tp_k_head_num_,self.head_dim_),infer_state.position_cos,infer_state.position_sin)
         o = None
         if infer_state.is_prefill:
             o = self.context_forward(q, k, v, infer_state)
         else:
             o = self.token_forward(q, k, v, infer_state)
         return o
-    
-
-
-
 class LlamaTransformerLayerInfer(TransformerLayerInferTpl):
     """
     """
@@ -168,6 +158,33 @@ class LlamaTransformerLayerInfer(TransformerLayerInferTpl):
         
     
     def _context_attention_kernel(self, q, k, v, infer_state:LlamaInferStateInfo, out=None)->torch.Tensor:
+        
+        cache_k = infer_state.mem_manager.key_buffer[self.layer_num_]
+        cache_v = infer_state.mem_manager.value_buffer[self.layer_num_]
+        logging.info(f"context cache_k:{cache_k.view(2048,-1)}")
+        logging.info(f"context cache_k shape:{cache_k.view(2048,-1).shape}")
+
+        logging.info(f"context cache_v:{cache_v.view(2048,-1)}")
+        logging.info(f"context cache_v shape:{cache_v.view(2048,-1).shape}")
+        
+        # if self.layer_num_ == 0:
+        #     index = None
+        #     for i in range(cache_k.size(0)):
+        #         if torch.all(cache_k[i] == 0):
+        #             index = i
+        #             break
+            
+        #     print(f"context k为0的index为:{index}")
+            
+        # if self.layer_num_ == 0:
+        #     index = None
+        #     for i in range(cache_v.size(0)):
+        #         if torch.all(cache_v[i] == 0):
+        #             index = i
+        #             break
+            
+        #     print(f"context v为0的index为:{index}")
+        
         o_tensor = torch.empty_like(q) if out is None else out
         context_attention_fwd(q.view(-1, self.tp_q_head_num_, self.head_dim_),
                               k.view(-1, self.tp_k_head_num_, self.head_dim_),
@@ -183,13 +200,42 @@ class LlamaTransformerLayerInfer(TransformerLayerInferTpl):
         destindex_copy_kv(key_buffer, mem_index, mem_manager.key_buffer[self.layer_num_])
         destindex_copy_kv(value_buffer, mem_index, mem_manager.value_buffer[self.layer_num_])
         return
-    
    
     def _token_decode_attention_gqa_flashdecoding(self, q, infer_state: LlamaInferStateInfo, out=None):
         # 对 gqa 模型进行推理优化的代码
         from ..triton_kernel.gqa_flash_decoding import gqa_token_decode_attention_flash_decoding
         cache_k = infer_state.mem_manager.key_buffer[self.layer_num_]
         cache_v = infer_state.mem_manager.value_buffer[self.layer_num_]
+        
+        logging.info(f"token cache_k:{cache_k.view(2048,-1)}")
+        logging.info(f"token cache_k shape:{cache_k.view(2048,-1).shape}")
+
+        logging.info(f"token cache_v:{cache_v.view(2048,-1)}")
+        logging.info(f"token cache_v shape:{cache_v.view(2048,-1).shape}")
+        
+        logging.info(f"token q:{q}")
+        logging.info(f"token q shape:{q.shape}")
+        
+        if self.layer_num_ == 0:
+            index = None
+            for i in range(cache_k.size(0)):
+                if torch.all(cache_k[i] == 0):
+                    index = i
+                    break
+            
+            print(f"k为0的index为:{index}")
+            
+        if self.layer_num_ == 0:
+            index = None
+            for i in range(cache_v.size(0)):
+                if torch.all(cache_v[i] == 0):
+                    index = i
+                    break
+            
+            print(f"v为0的index为:{index}")
+        
+        
+        
         return gqa_token_decode_attention_flash_decoding(q, infer_state, self.tp_q_head_num_, self.head_dim_, cache_k, cache_v, out=out)
 
     

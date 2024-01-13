@@ -58,6 +58,9 @@ from manager.memory_manager import MemoryManager
 from manager.request_manager import RequestManager
 from model.layers.triton_kernel.copy_kv_index_to_req import copy_kv_index_to_req
 
+import logging
+logging.basicConfig(filename='example.log', level=logging.INFO, 
+                    format='%(asctime)s %(levelname)s: %(message)s')
 
 KVCache = Tuple[torch.Tensor, torch.Tensor]
 
@@ -180,33 +183,52 @@ class LlamaAttention(nn.Module):
             torch.Tensor: _description_
         """
         #! qkv: [batch_size, seq_len, tp_q_size + 2 * tp_kv_size]
-        print('hidden_states:')
-        print(hidden_states.shape)
+        # print('hidden_states:')
+        # print(hidden_states.shape)
         qkv = self.qkv_proj(hidden_states)
-        print('qkv:')
-        print(qkv.shape)
+        # print('qkv:')
+        # print(qkv.shape)
         #! q: [batch_size, seq_len, tp_q_size]
         #! k,v: [batch_size, seq_len, tp_kv_size]
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
-        print('q:')
-        print(q.shape)
-        print('k:')
-        print(k.shape)
-        print('v:')
-        print(v.shape)
+        
+        logging.info(f"LlamaAttention split q:{q}")
+        logging.info(f"LlamaAttention split q shape:{q.shape}")
+        logging.info(f"LlamaAttention split k:{k}")
+        logging.info(f"LlamaAttention split k shape:{k.shape}")
+        logging.info(f"LlamaAttention split v:{v}")
+        logging.info(f"LlamaAttention split v shape:{v.shape}")
+        # print('q:')
+        # print(q.shape)
+        # print('k:')
+        # print(k.shape)
+        # print('v:')
+        # print(v.shape)
         #! rotary embedding encoding for key & value
         if infer_state.is_prefill == False:
+            # embedding_positions = positions[0][-1:].unsqueeze_(dim=0)
             embedding_positions = positions[-1:]
         else:
             embedding_positions = positions
         # q, k = self.rotary_emb(positions, q, k)
+        # print('fuck')
+        # print(embedding_positions.shape)
         q, k = self.rotary_emb(embedding_positions, q, k)
-        print('modify k:')
-        print(k.shape)
-        print('modify q:')
-        print(q.shape)
+                
+        logging.info(f"LlamaAttention rotary q:{q}")
+        logging.info(f"LlamaAttention rotary q shape:{q.shape}")
+        logging.info(f"LlamaAttention rotary k:{k}")
+        logging.info(f"LlamaAttention rotary k shape:{k.shape}")
+        # print('modify k:')
+        # print(k.shape)
+        # print('modify q:')
+        # print(q.shape)
         attn_output = self.attn.forward(q, k, v, infer_state)
+        logging.info(f"attn_output:{attn_output}")
+        logging.info(f"attn_output shape:{attn_output.shape}")
         output = self.o_proj(attn_output)
+        logging.info(f"o_output:{output}")
+        logging.info(f"o_output shape:{output.shape}")
         return output
 
 
@@ -254,8 +276,10 @@ class LlamaDecoderLayer(nn.Module):
         residual: Optional[torch.Tensor],
         infer_state: LlamaInferStateInfo,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        print("LlamaDecoderLayer forwarding")
+        # print("LlamaDecoderLayer forwarding")
         # Self Attention
+        
+
         if residual is None:
             residual = hidden_states
             hidden_states = self.input_layernorm(hidden_states)
@@ -263,16 +287,29 @@ class LlamaDecoderLayer(nn.Module):
             hidden_states, residual = self.input_layernorm(
                 hidden_states, residual)
             
+        logging.info(f"LlamaDecoderLayer layernorm hidden_states:{hidden_states}")
+        logging.info(f"LlamaDecoderLayer layernorm hidden_states shape:{hidden_states.shape}")
+
         hidden_states = self.self_attn(
             positions=positions,
             hidden_states=hidden_states,
             infer_state=infer_state
         )
+        
+        logging.info(f"LlamaDecoderLayer attn hidden_states:{hidden_states}")
+        logging.info(f"LlamaDecoderLayer attn hidden_states shape:{hidden_states.shape}")
 
         # Fully Connected
         hidden_states, residual = self.post_attention_layernorm(
             hidden_states, residual)
+        
+        logging.info(f"LlamaDecoderLayer post_attention_layernorm hidden_states:{hidden_states}")
+        logging.info(f"LlamaDecoderLayer post_attention_layernorm hidden_states shape:{hidden_states.shape}")
+
         hidden_states = self.mlp(hidden_states)
+        
+        
+        
         return hidden_states, residual
 
 
@@ -305,9 +342,12 @@ class LlamaModel(nn.Module):
         input_metadata: InputMetadata,
     ) -> torch.Tensor:
         
-        print("LlamaModel forwarding")
-
+        # print("LlamaModel forwarding")
         hidden_states = self.embed_tokens(input_ids)
+        
+        logging.info(f"LlamaModel embed_tokens hidden_states:{hidden_states}")
+        logging.info(f"LlamaModel embed_tokens hidden_states shape:{hidden_states.shape}")
+        
         residual = None
         for i in range(len(self.layers)):
             layer = self.layers[i]
@@ -319,6 +359,10 @@ class LlamaModel(nn.Module):
                 residual,
                 infer_state,
             )
+        
+        logging.info(f"LlamaModel attention hidden_states:{hidden_states}")
+        logging.info(f"LlamaModel attention hidden_states shape:{hidden_states.shape}")
+        
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
 
@@ -438,6 +482,7 @@ class LlamaForCausalLM(nn.Module):
 
         infer_state.mem_manager = self.mem_manager
         infer_state.req_manager = self.req_manager
+        
 
         alloc_mem = self.mem_manager.alloc_contiguous(infer_state.total_token_num)
         if alloc_mem is not None:
@@ -458,6 +503,7 @@ class LlamaForCausalLM(nn.Module):
 
         infer_state.init_some_extra_state(self, input_ids)
         
+        input_ids.unsqueeze_(dim=0)
         hidden_states = self.model(input_ids,positions,infer_state,input_metadata)
         return hidden_states
     
@@ -512,7 +558,6 @@ class LlamaForCausalLM(nn.Module):
         input_metadata: InputMetadata,
     )    -> torch.Tensor:
         
-        print("LlamaForCausalLM forwarding")
 
         if is_prefill:
             return self._prefill(
