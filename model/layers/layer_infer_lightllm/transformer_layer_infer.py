@@ -12,9 +12,9 @@ from functools import partial
 import torch.nn as nn
 from ..triton_kernel.rotary_emb import rotary_emb_fwd
 
-import logging
-logging.basicConfig(filename='example.log', level=logging.INFO, 
-                    format='%(asctime)s %(levelname)s: %(message)s')
+from utils.log_utils import init_logger
+
+logger = init_logger(__name__)
 
 class BaseLayerInfer(nn.Module):
 
