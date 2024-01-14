@@ -119,17 +119,6 @@ class TransformerLayerInferTpl(TransformerLayerInfer):
         o = self._token_attention(q, k, v, infer_state)
         return o
     
-    def torch_rotary_emb(self, x, cos, sin):
-        seq_len, h, dim = x.shape
-        x0 = x[:, :, 0: dim // 2]
-        x1 = x[:, :, dim // 2: dim]
-        cos = cos.view((seq_len, 1, dim // 2))
-        sin = sin.view((seq_len, 1, dim // 2))
-        o0 = x0 * cos - x1 * sin
-        o1 = x0 * sin + x1 * cos
-        return torch.cat((o0, o1), dim=-1)
-
-    
     def forward(self, q, k, v, infer_state: LlamaInferStateInfo):
         rotary_emb_fwd(q.view(-1,self.tp_q_head_num_,self.head_dim_),infer_state.position_cos,infer_state.position_sin)
         rotary_emb_fwd(k.view(-1,self.tp_k_head_num_,self.head_dim_),infer_state.position_cos,infer_state.position_sin)
