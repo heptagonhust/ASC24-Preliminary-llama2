@@ -30,9 +30,9 @@ if __name__ == "__main__":
     the following code is used to start the submodule processes
     Args:
         model_dir: 模型路径
-        batch_size: 批处理最大的大小
-        max_total_token_num: 模型最大长度
-        max_req_num: 同时到来的最大请求数
+        batch_size: 两个Batch可能会合并，这是用来控制每个被合并Batch占用token大小的
+        max_total_token_num: kvcache里面的最大token数目，越大越容易OOM
+        max_req_num: 一个Batch里面的最大请求数
         max_req_total_len: 输入+输出最大长度
         router_token_ratio: router的token占用率
         router_max_new_token_len: router最大的新token长度
