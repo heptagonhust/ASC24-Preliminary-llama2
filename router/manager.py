@@ -234,7 +234,9 @@ class RouterManager:
         unfinished_req_ids, finished_req_ids = batch.mark_and_get_finished_req_and_preupdate_status(self.eos_id)
         # self._send_to_detokenization_proc(batch, req_to_out_status)
         detokenize_res = self._detokenize(batch, req_to_out_status)
-        self.send_to_req_server.send_pyobj(detokenize_res)
+        logger.info(f"detokenize_res: {detokenize_res}")
+        for res in detokenize_res:
+            self.send_to_req_server.send_pyobj(res)
         batch.filter_out_finished_req(unfinished_req_ids, finished_req_ids)
         self._handle_finish_req(batch, unfinished_req_ids, finished_req_ids)
         return
@@ -247,7 +249,8 @@ class RouterManager:
         unfinished_req_ids, finished_req_ids = batch.mark_and_get_finished_req_and_preupdate_status(self.eos_id)
         detokenize_res = self._detokenize(batch, req_to_out_status)
         logger.info(f"detokenize_res: {detokenize_res}")
-        self.send_to_req_server.send_pyobj(detokenize_res)
+        for res in detokenize_res:
+            self.send_to_req_server.send_pyobj(res)
         batch.filter_out_finished_req(unfinished_req_ids, finished_req_ids)
         self._handle_finish_req(batch, unfinished_req_ids, finished_req_ids)
         return
@@ -320,6 +323,9 @@ class RouterManager:
         return batch.batch_decode_need_tokens <= remaining_tokens
     
     def _detokenize(self, batch: Batch, req_to_out_status):
+        '''
+        fuck it, i should choose finished reqs and detokenize them and return them only
+        '''
         batch_out = BatchTokenIdOut()
         for req_id, (_, _, new_token_id, new_gen_metadata) in req_to_out_status.items():
             req = batch.id_to_reqs[req_id]
@@ -327,32 +333,34 @@ class RouterManager:
                 batch_out.reqs_infs.append((req_id, new_token_id, new_gen_metadata, req.has_generate_finished, req.aborted))
         
         new_batch_str_out = BatchStrOut()
-        for req_id, new_token_id, new_gen_metadata, finished, abort in batch_out.reqs_infs:
+        for req in batch.id_to_reqs.values():
 
-            if req_id not in self.req_id_to_out:
+            if not req.has_generate_finished:
                 continue
-            req_out:ReqDetokenizationState = self.req_id_to_out[req_id]
-            req_out.output_ids.append(new_token_id)
-            req_out.gen_metadata.update(new_gen_metadata)
+
+            req_status, req_cur_kv_len, next_token_id, metadata = req_to_out_status[req.request_id]
+
+            out_text = req.output_ids
+            out_text.append(next_token_id)
 
             out_text = self.tokenizer.decode(
-                req_out.output_ids,
+                out_text,
                 skip_special_tokens=True,
                 clean_up_tokenization_spaces=False
             )
-
             if out_text.endswith(u'\ufffd'):
                 new_text = ''
             else:
-                new_text = out_text[len(req_out.output_str):]
-                req_out.output_str = out_text
-            new_batch_str_out.reqs_infs.append((req_id, new_text, new_gen_metadata, True if abort else finished, abort))
-            if finished or abort:
+                new_text = out_text
+            
+            new_batch_str_out.reqs_infs.append(
+                (req_id, new_text, new_gen_metadata, True if req.aborted else req.has_generate_finished, req.aborted))
+            if req.has_generate_finished or req.aborted:
                 try:
                     del self.req_id_to_out[req_id]
                 except:
                     pass
-        return new_batch_str_out
+        return new_batch_str_out.reqs_infs
 
         
     async def loop_for_netio_req(self):
