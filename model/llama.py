@@ -191,7 +191,7 @@ class LlamaAttention(nn.Module):
         # logger.info(f"qkv shape: {q.shape}, {k.shape}, {v.shape}")
         #! rotary embedding encoding for key & value
         # logger.info(f"positions: {positions}")
-        q, k = self.rotary_emb(positions, q, k)
+        # q, k = self.rotary_emb(positions, q, k)
         attn_output = self.attn.forward(q, k, v, infer_state)
         output = self.o_proj(attn_output)
         return output

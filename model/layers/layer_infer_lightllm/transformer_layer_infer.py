@@ -10,6 +10,7 @@ from model.layers.triton_kernel.rotary_emb import rotary_emb_fwd
 from model.layers.embedding import RotaryEmbedding
 from functools import partial
 import torch.nn as nn
+from ..triton_kernel.rotary_emb import rotary_emb_fwd
 
 class BaseLayerInfer(nn.Module):
 
@@ -106,7 +107,9 @@ class TransformerLayerInferTpl(TransformerLayerInfer):
         o = self._token_attention(q, k, v, infer_state)
         return o
     
-    def forward(self, q, k, v, infer_state: InferStateInfo):
+    def forward(self, q, k, v, infer_state: LlamaInferStateInfo):
+        rotary_emb_fwd(q.view(-1,self.tp_q_head_num_,self.head_dim_),infer_state.position_cos,infer_state.position_sin)
+        rotary_emb_fwd(k.view(-1,self.tp_k_head_num_,self.head_dim_),infer_state.position_cos,infer_state.position_sin)
         o = None
         if infer_state.is_prefill:
             o = self.context_forward(q, k, v, infer_state)
