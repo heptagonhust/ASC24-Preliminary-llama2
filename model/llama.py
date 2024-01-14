@@ -58,6 +58,7 @@ from utils.utils import repair_config,init_req_to_token_indexes
 from manager.memory_manager import MemoryManager
 from manager.request_manager import RequestManager
 from model.layers.triton_kernel.copy_kv_index_to_req import copy_kv_index_to_req
+from model.layers.triton_kernel.rmsnorm import rmsnorm_forward
 
 
 from utils.log_utils import init_logger
@@ -188,9 +189,7 @@ class LlamaAttention(nn.Module):
         #! q: [batch_size, seq_len, tp_q_size]
         #! k,v: [batch_size, seq_len, tp_kv_size]
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
-        logger.info(f"qkv shape: {q.shape}, {k.shape}, {v.shape}")
         #! rotary embedding encoding for key & value
-        logger.info(f"positions: {positions}")
         # q, k = self.rotary_emb(positions, q, k)
         attn_output = self.attn.forward(q, k, v, infer_state)
 
@@ -209,6 +208,7 @@ class LlamaDecoderLayer(nn.Module):
     ) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
+        self.layer_num = layer_num
         rope_theta = getattr(config, "rope_theta", 10000)
         rope_scaling = getattr(config, "rope_scaling", None)
         max_position_embeddings = getattr(config, "max_position_embeddings",
@@ -262,9 +262,9 @@ class LlamaDecoderLayer(nn.Module):
         # Fully Connected
         hidden_states, residual = self.post_attention_layernorm(
             hidden_states, residual)
-
-        hidden_states = self.mlp(hidden_states) 
         
+        hidden_states = self.mlp(hidden_states)
+ 
         return hidden_states, residual
 
 
@@ -297,7 +297,7 @@ class LlamaModel(nn.Module):
         input_metadata: InputMetadata,
     ) -> torch.Tensor:
         
-        hidden_states = self.embed_tokens(input_ids)
+        hidden_states: torch.Tensor = self.embed_tokens(input_ids)
         residual = None
         for i in range(len(self.layers)):
             layer = self.layers[i]
@@ -310,7 +310,9 @@ class LlamaModel(nn.Module):
                 infer_state,
             )
         
-        hidden_states, _ = self.norm(hidden_states, residual)
+        hidden_states.add_(residual)
+        hidden_states = self.norm(hidden_states)
+
         return hidden_states
 
 
@@ -345,6 +347,7 @@ class LlamaForCausalLM(nn.Module):
         self._init_req_manager()
         self._init_some_value()
         self._init_to_get_rotary()
+
         
     def _init_config(self):
         with open(os.path.join(self.weight_dir, "config.json"), 'r') as json_file:
@@ -451,10 +454,9 @@ class LlamaForCausalLM(nn.Module):
 
         infer_state.init_some_extra_state(self, input_ids)
         
-        input_ids.unsqueeze_(dim=0)
         hidden_states = self.model(input_ids,positions,infer_state,input_metadata)
 
-        hidden_states = self.postlayer_get_embedding(hidden_states, infer_state, return_logits=False)
+        hidden_states = self.postlayer_get_embedding(hidden_states, infer_state, return_logits=True)
 
         return hidden_states
     
@@ -492,7 +494,7 @@ class LlamaForCausalLM(nn.Module):
         # hidden_state = self._token_forward(input_ids, infer_state)
         hidden_states = self.model(input_ids, positions, infer_state, input_metadata)
 
-        hidden_states = self.postlayer_get_embedding(hidden_states, infer_state, return_logits=False)
+        hidden_states = self.postlayer_get_embedding(hidden_states, infer_state, return_logits=True)
         
         return hidden_states
     
@@ -583,18 +585,15 @@ class LlamaForCausalLM(nn.Module):
         infer_state: LlamaInferStateInfo,
         return_logits: bool
     ) -> torch.Tensor:
-        logger.info(f"input_embdings: {input_embedding.shape}")
         last_input, token_num = self._slice_get_last_input(input_embedding, infer_state)
-        logger.info(f"last_input: {last_input.shape}")
         input_embedding = None
-        last_input = self.norm(last_input)
         last_input = einops.rearrange(last_input, "batch embed_dim -> embed_dim batch").contiguous().reshape(-1, token_num)
         logic_batch = torch.mm(self.lm_head.weight, last_input)
         gather_data = logic_batch
 
         logic_batch = None
 
-        print(f"gather_data: {gather_data.shape}")
+        print(f"gather_data: {gather_data.shape}, {gather_data}")
 
         if not return_logits:
             prob_out = torch.softmax(gather_data.permute(1, 0).float(), dim=-1)

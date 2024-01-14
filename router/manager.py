@@ -212,7 +212,7 @@ class RouterManager:
             # pause strategy
             paused_reqs = select_paused_reqs(self.running_batch, self.pause_strategy, self.req_queue, self.max_total_token_num)
             self._pause_reqs(self.running_batch, paused_reqs)
-            self.has_wait_tokens = 0
+            self.has_wait_tokens = 0   
             return
         return
 
@@ -232,6 +232,9 @@ class RouterManager:
 
         self._update_out_status_to_batch(batch, req_to_out_status)
         unfinished_req_ids, finished_req_ids = batch.mark_and_get_finished_req_and_preupdate_status(self.eos_id)
+        
+        logger.info(f"batch: {batch.batch_id}, req_id and has_generate_finished: {[(req.request_id, req.has_generate_finished) for req in batch.reqs]}")
+         
         # self._send_to_detokenization_proc(batch, req_to_out_status)
         detokenize_res = self._detokenize(batch, req_to_out_status)
         logger.info(f"detokenize_res: {detokenize_res}")
@@ -247,6 +250,9 @@ class RouterManager:
 
         self._update_out_status_to_batch(batch, req_to_out_status)
         unfinished_req_ids, finished_req_ids = batch.mark_and_get_finished_req_and_preupdate_status(self.eos_id)
+
+        logger.info(f"batch: {batch.batch_id}, req_id and has_generate_finished: {[(req.request_id, req.has_generate_finished) for req in batch.reqs]}")
+
         detokenize_res = self._detokenize(batch, req_to_out_status)
         logger.info(f"detokenize_res: {detokenize_res}")
         for res in detokenize_res:
@@ -333,7 +339,7 @@ class RouterManager:
                 batch_out.reqs_infs.append((req_id, new_token_id, new_gen_metadata, req.has_generate_finished, req.aborted))
         
         new_batch_str_out = BatchStrOut()
-        for req in batch.id_to_reqs.values():
+        for req_id, req in batch.id_to_reqs.items():
 
             if not req.has_generate_finished:
                 continue
@@ -354,7 +360,7 @@ class RouterManager:
                 new_text = out_text
             
             new_batch_str_out.reqs_infs.append(
-                (req_id, new_text, new_gen_metadata, True if req.aborted else req.has_generate_finished, req.aborted))
+                (req.request_id, new_text, new_gen_metadata, True if req.aborted else req.has_generate_finished, req.aborted))
             if req.has_generate_finished or req.aborted:
                 try:
                     del self.req_id_to_out[req_id]

@@ -64,7 +64,6 @@ def sample(logits, reqs):
 
     apply_penalty(logits, presence_penalties, frequency_penalties, repetition_penalties, p_token_ids, p_token_counts, p_cumsum_seq_len, p_max_len_in_batch) 
     
-    logger.info(f"logits: {logits.shape}, temperature: {temperatures.shape}, top_p: {top_ps}, top_k: {top_ks}")
 
     logits.div_(temperatures.view((-1, 1)))
     probs = torch.softmax(logits, dim=-1)
