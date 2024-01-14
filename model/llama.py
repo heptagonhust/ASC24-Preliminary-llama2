@@ -558,7 +558,10 @@ class LlamaForCausalLM(nn.Module):
                                      device=input_embdings.device,
                                      dtype=torch.float16)
             last_index = torch.cumsum(infer_state.b_seq_len, dim=0, dtype=torch.long) - 1
-            last_input[:, :] = input_embdings[0, last_index, :]
+            if len(input_embdings.shape) == 3:
+                last_input[:, :] = input_embdings[0, last_index, :]
+            else:
+                last_input[:, :] = input_embdings[last_index, :]
             return last_input, batch_size
 
         if infer_state.is_prefill and infer_state.return_all_prompt_logprobs:
@@ -567,7 +570,10 @@ class LlamaForCausalLM(nn.Module):
         
         if not infer_state.is_prefill:
             batch_size = infer_state.batch_size
-            return input_embdings[0, -batch_size:, :], batch_size
+            if len(input_embdings.shape) == 3:
+                return input_embdings[0, -batch_size:, :], batch_size
+            else:
+                return input_embdings[-batch_size:, :], batch_size
         
         assert False, "Error State"
     
