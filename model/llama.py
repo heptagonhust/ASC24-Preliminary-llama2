@@ -166,7 +166,7 @@ class LlamaAttention(nn.Module):
             self.num_kv_heads,
             self.head_dim
         )
-
+        
     def forward(
         self,
         positions: torch.Tensor,
@@ -188,12 +188,11 @@ class LlamaAttention(nn.Module):
         #! q: [batch_size, seq_len, tp_q_size]
         #! k,v: [batch_size, seq_len, tp_kv_size]
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
-        # logger.info(f"qkv shape: {q.shape}, {k.shape}, {v.shape}")
-        #! rotary embedding encoding for key & value
-        # logger.info(f"positions: {positions}")
-        q, k = self.rotary_emb(positions, q, k)
+
         attn_output = self.attn.forward(q, k, v, infer_state)
+
         output = self.o_proj(attn_output)
+
         return output
 
 
@@ -241,8 +240,8 @@ class LlamaDecoderLayer(nn.Module):
         residual: Optional[torch.Tensor],
         infer_state: LlamaInferStateInfo,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        print("LlamaDecoderLayer forwarding")
         # Self Attention
+        
         if residual is None:
             residual = hidden_states
             hidden_states = self.input_layernorm(hidden_states)
@@ -250,6 +249,7 @@ class LlamaDecoderLayer(nn.Module):
             hidden_states, residual = self.input_layernorm(
                 hidden_states, residual)
             
+
         hidden_states = self.self_attn(
             positions=positions,
             hidden_states=hidden_states,
@@ -259,7 +259,9 @@ class LlamaDecoderLayer(nn.Module):
         # Fully Connected
         hidden_states, residual = self.post_attention_layernorm(
             hidden_states, residual)
-        hidden_states = self.mlp(hidden_states)
+
+        hidden_states = self.mlp(hidden_states) 
+        
         return hidden_states, residual
 
 
@@ -292,8 +294,6 @@ class LlamaModel(nn.Module):
         input_metadata: InputMetadata,
     ) -> torch.Tensor:
         
-        print("LlamaModel forwarding")
-
         hidden_states = self.embed_tokens(input_ids)
         residual = None
         for i in range(len(self.layers)):
@@ -306,6 +306,7 @@ class LlamaModel(nn.Module):
                 residual,
                 infer_state,
             )
+        
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
 
@@ -391,14 +392,14 @@ class LlamaForCausalLM(nn.Module):
         base = self.config.get("rope_theta", float(default_base))
 
         if "max_sequence_length" in self.config:
-            max_seq_len = self.config["max_sequence_length"]
+            max_seq_len = self.config["max_sequence_length"]        
         else:
             max_position_embeddings = self.config.get(
                 "max_position_embeddings",
                 2048 if base <= 10000.0 + 1e-5 else 16384
             )
             max_seq_len = max_position_embeddings * rope_scaling_factor
-            
+        
         inv_freq = 1.0 / (base ** (torch.arange(0, self.head_dim_, 2, device="cpu", dtype=torch.float32) / self.head_dim_))
         t = torch.arange(max_seq_len + 1024 * 64, device="cpu", dtype=torch.float32) / rope_scaling_factor
         freqs = torch.outer(t, inv_freq)
@@ -426,6 +427,7 @@ class LlamaForCausalLM(nn.Module):
 
         infer_state.mem_manager = self.mem_manager
         infer_state.req_manager = self.req_manager
+        
 
         alloc_mem = self.mem_manager.alloc_contiguous(infer_state.total_token_num)
         if alloc_mem is not None:
@@ -446,6 +448,7 @@ class LlamaForCausalLM(nn.Module):
 
         infer_state.init_some_extra_state(self, input_ids)
         
+        input_ids.unsqueeze_(dim=0)
         hidden_states = self.model(input_ids,positions,infer_state,input_metadata)
 
         hidden_states = self.postlayer_get_embedding(hidden_states, infer_state, return_logits=False)
@@ -503,9 +506,7 @@ class LlamaForCausalLM(nn.Module):
         is_prefill: bool,
         # kv_caches: List[KVCache],
         input_metadata: InputMetadata,
-    ) -> torch.Tensor:
-        
-        print("LlamaForCausalLM forwarding")
+    )    -> torch.Tensor:
 
         if is_prefill:
             return self._prefill(

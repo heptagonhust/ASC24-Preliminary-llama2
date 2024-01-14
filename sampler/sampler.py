@@ -57,6 +57,7 @@ class Sampler(nn.Module):
         embedding_bias: Optional[torch.Tensor] = None,
     ) -> SamplerOutput:
         # Get the hidden states that we use for sampling.
+        
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1]).index_select(
                                             0, sampling_metadata.selected_token_indices)
 
@@ -78,6 +79,7 @@ class Sampler(nn.Module):
          do_min_p) = SamplingTensors.from_sampling_metadata(
              sampling_metadata, vocab_size, logits.device, logits.dtype)
 
+        do_penalties = True
         # Apply presence and frequency penalties.
         if do_penalties:
             logits = _apply_penalties(logits, sampling_tensors.prompt_tokens,
@@ -104,8 +106,10 @@ class Sampler(nn.Module):
         # Use log_softmax to ensure numerical stability.
         logprobs = torch.log_softmax(logits, dim=-1, dtype=torch.float)
 
+
         # Sample the next tokens.
         sample_results = _sample(probs, logprobs, sampling_metadata)
+        
         # Get the logprobs query results.
         prompt_logprobs, sample_logprobs = _get_logprobs(
             logprobs, sampling_metadata, sample_results)
@@ -390,7 +394,8 @@ def _multinomial(
                                          probs.shape[1]).contiguous().view(
                                              -1, probs.shape[1])
     q = torch.empty_like(probs).exponential_(1)
-    return probs.div_(q).argmax(dim=1).view(-1, num_samples)
+    results = probs.div_(q).argmax(dim=1).view(-1, num_samples)
+    return results
 
 
 def _sample(
@@ -438,6 +443,7 @@ def _sample(
             #! prob: Tensor(sample_seq_len, token_space_size)
             multinomial_samples = _multinomial(probs[sample_indices],
                                                max_best_of)
+            
         elif sampling_type == SamplingType.BEAM:
             beam_search_logprobs = logprobs[sample_indices]
         else:

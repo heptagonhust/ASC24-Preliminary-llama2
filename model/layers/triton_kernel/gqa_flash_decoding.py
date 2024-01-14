@@ -33,7 +33,7 @@ def gqa_token_decode_attention_flash_decoding(q, infer_state:InferStateInfo, q_h
                                         q_head_num, 
                                         max_len_in_batch // BLOCK_SEQ + 1, 
                                         head_dim], 
-                                        dtype=torch.float32, 
+                                        dtype=torch.float32,  # TODO: float32?
                                         device="cuda")
         infer_state.mid_o_logexpsum = torch.empty([batch_size, 
                                         q_head_num,

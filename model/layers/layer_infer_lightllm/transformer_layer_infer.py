@@ -10,6 +10,11 @@ from model.layers.triton_kernel.rotary_emb import rotary_emb_fwd
 from model.layers.embedding import RotaryEmbedding
 from functools import partial
 import torch.nn as nn
+from ..triton_kernel.rotary_emb import rotary_emb_fwd
+
+import logging
+logging.basicConfig(filename='example.log', level=logging.INFO, 
+                    format='%(asctime)s %(levelname)s: %(message)s')
 
 class BaseLayerInfer(nn.Module):
 
@@ -58,7 +63,15 @@ class TransformerLayerInferTpl(TransformerLayerInfer):
             cache_v = infer_state.value_buffer 
         return cache_k, cache_v
     
-    def _copy_kv_to_kvcache(self, k, v, cache_k, cache_v):
+    def _copy_kv_to_kvcache_context(self, k, v, cache_k, cache_v):
+        '''
+        copy k, v we generated in "qkv_proj" to cache_k, cache_v
+        '''
+        cache_k.view(-1, self.tp_k_head_num_ * self.head_dim_).copy_(k.view(-1, self.tp_k_head_num_ * self.head_dim_))
+        cache_v.view(-1, self.tp_v_head_num_ * self.head_dim_).copy_(v.view(-1, self.tp_v_head_num_ * self.head_dim_))
+        return
+    
+    def _copy_kv_to_kvcache_decode(self, k, v, cache_k, cache_v):
         '''
         copy k, v we generated in "qkv_proj" to cache_k, cache_v
         '''
@@ -86,14 +99,14 @@ class TransformerLayerInferTpl(TransformerLayerInfer):
 
     def _context_attention(self, q, k, v, infer_state: InferStateInfo):
         cache_k, cache_v = self._pre_cache_kv(infer_state)
-        self._copy_kv_to_kvcache(k, v, cache_k, cache_v)
+        self._copy_kv_to_kvcache_context(k, v, cache_k, cache_v)
         self._post_cache_kv(cache_k, cache_v, infer_state)
         o = self._context_attention_kernel(q, cache_k, cache_v, infer_state)
         return o
 
     def _token_attention(self, q, k, v, infer_state: InferStateInfo):
         cache_k, cache_v = self._pre_cache_kv(infer_state)
-        self._copy_kv_to_kvcache(k, v, cache_k, cache_v)
+        self._copy_kv_to_kvcache_decode(k, v, cache_k, cache_v)
         self._post_cache_kv(cache_k, cache_v, infer_state)
         o = self._token_attention_kernel(q, infer_state)
         return o
@@ -106,17 +119,26 @@ class TransformerLayerInferTpl(TransformerLayerInfer):
         o = self._token_attention(q, k, v, infer_state)
         return o
     
-    def forward(self, q, k, v, infer_state: InferStateInfo):
+    def torch_rotary_emb(self, x, cos, sin):
+        seq_len, h, dim = x.shape
+        x0 = x[:, :, 0: dim // 2]
+        x1 = x[:, :, dim // 2: dim]
+        cos = cos.view((seq_len, 1, dim // 2))
+        sin = sin.view((seq_len, 1, dim // 2))
+        o0 = x0 * cos - x1 * sin
+        o1 = x0 * sin + x1 * cos
+        return torch.cat((o0, o1), dim=-1)
+
+    
+    def forward(self, q, k, v, infer_state: LlamaInferStateInfo):
+        rotary_emb_fwd(q.view(-1,self.tp_q_head_num_,self.head_dim_),infer_state.position_cos,infer_state.position_sin)
+        rotary_emb_fwd(k.view(-1,self.tp_k_head_num_,self.head_dim_),infer_state.position_cos,infer_state.position_sin)
         o = None
         if infer_state.is_prefill:
             o = self.context_forward(q, k, v, infer_state)
         else:
             o = self.token_forward(q, k, v, infer_state)
         return o
-    
-
-
-
 class LlamaTransformerLayerInfer(TransformerLayerInferTpl):
     """
     """
@@ -156,13 +178,13 @@ class LlamaTransformerLayerInfer(TransformerLayerInferTpl):
         destindex_copy_kv(key_buffer, mem_index, mem_manager.key_buffer[self.layer_num_])
         destindex_copy_kv(value_buffer, mem_index, mem_manager.value_buffer[self.layer_num_])
         return
-    
    
     def _token_decode_attention_gqa_flashdecoding(self, q, infer_state: LlamaInferStateInfo, out=None):
         # 对 gqa 模型进行推理优化的代码
         from ..triton_kernel.gqa_flash_decoding import gqa_token_decode_attention_flash_decoding
         cache_k = infer_state.mem_manager.key_buffer[self.layer_num_]
         cache_v = infer_state.mem_manager.value_buffer[self.layer_num_]
+        
         return gqa_token_decode_attention_flash_decoding(q, infer_state, self.tp_q_head_num_, self.head_dim_, cache_k, cache_v, out=out)
 
     
