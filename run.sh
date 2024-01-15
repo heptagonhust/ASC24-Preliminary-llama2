@@ -5,4 +5,4 @@ torchrun --nnodes $SLURM_NNODES \
         --master_addr $MASTER_ADDR \
         --master_port $MASTER_PORT \
         --node_rank $SLURM_NODEID \
-        ./llama_offline_inference_new.py
+        ./start_model_process.py --base-port $BASE_PORT

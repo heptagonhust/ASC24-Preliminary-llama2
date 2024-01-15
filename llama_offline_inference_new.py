@@ -1,4 +1,5 @@
 # from llama_engine import LLamaEngine
+import os
 from llama_engine_new import RequestEngine
 from model.model_metadata import ModelConfig, ParallelConfig, PortConfig, ReqConfig
 from sampler.sampling_metadata import SamplingParams
@@ -6,11 +7,26 @@ import json
 from utils.start_utils import start_submodule_processes, kill_submodule_processes
 from router.manager import start_router_process
 
+from utils.log_utils import init_logger
+logger = init_logger(__name__)
 
 if __name__ == "__main__":
-    model_config_llama = ModelConfig("/data/7B-chat-hf", "/data/7B-chat-hf", True, 1, None)
-    parallel_config_llama = ParallelConfig(pipeline_parallel_size = 1, tensor_parallel_size = 1)
-    port_config = PortConfig(router_port=55555, req_server_port=55556)
+
+    # 拿到模型进程的主机号
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--hosts", type=str, default="127.0.0.1")
+    parser.add_argument("--base-port", type=int, default=44444)
+    args = parser.parse_args()
+    hosts: str = args.hosts
+    hosts = hosts.split(",")
+    hosts = hosts[:-1]
+    rpc_base_port = args.base_port
+
+
+    model_config_llama = ModelConfig("/data_local/13B-hf", "/data_local/13B-hf", True, 1, None)
+    parallel_config_llama = ParallelConfig(pipeline_parallel_size = 1, tensor_parallel_size = 2)
+    port_config = PortConfig(router_port=55555, req_server_port=55556, rpc_base_port=rpc_base_port)
     sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
     req_config = ReqConfig(batch_size=10000,
                            max_total_token_num=20000,
@@ -44,9 +60,9 @@ if __name__ == "__main__":
             req_config.max_req_total_len,
             req_config.router_token_ratio,
             req_config.router_max_new_token_len,
-            port_config.router_port,
-            port_config.req_server_port,
-            parallel_config_llama
+            port_config,
+            parallel_config_llama,
+            hosts
         )]
     )
 

@@ -8,9 +8,11 @@ class PortConfig:
         self,
         router_port,
         req_server_port,
+        rpc_base_port,
     ) -> None:
         self.router_port = router_port
         self.req_server_port = req_server_port
+        self.rpc_base_port = rpc_base_port
 
 
 class ParallelConfig:

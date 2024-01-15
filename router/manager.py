@@ -1,11 +1,16 @@
 from typing import Dict, List, Optional
-from model.model_metadata import ParallelConfig
+
+import torch
+from model.model_metadata import ParallelConfig, PortConfig
 from sampler.sampling_params import SamplingParams
 from router.io_struct import Req, NormalReq, Batch
-from router.model_infer.model_rpc import ModelRpcServer
+from router.model_infer.model_rpc import ModelRpcServer, ModelRpcClient
 from router.req_queue import ReqQueue
 from router.io_struct import BatchTokenIdOut, AbortReq, ReqRunStatus, ReqDetokenizationState, BatchStrOut
 from router.pause_strategy import Fcfs, select_paused_reqs
+from rpyc.utils.classic import obtain
+import rpyc
+
 
 from transformers import AutoTokenizer
 
@@ -44,9 +49,9 @@ class RouterManager:
             max_req_total_len,
             router_token_ratio,
             router_max_new_token_len,
-            router_port,
-            req_port,
+            port_config: PortConfig,
             parallel_config_llama: ParallelConfig,
+            hosts: List[str],
         ):
         self.batch_size = batch_size
         self.weight_dir = model_dir
@@ -73,9 +78,8 @@ class RouterManager:
 
         self.prompt_cache_strs = []
 
-        self.model_rpc_server = ModelRpcServer()
-
         self.parallel_config_llama = parallel_config_llama
+        self.port_config = port_config
 
         context = zmq.asyncio.Context(2)
 
@@ -87,19 +91,40 @@ class RouterManager:
         self.send_to_req_server.connect(f"ipc:///tmp/req_server.ipc")
         # self.send_to_req_server.connect(f"tcp://127.0.0.1:{req_port}")
 
+        # 现在正在跑的所有节点
+        self.hosts = hosts
+
         return
 
-    def wait_to_model_ready(self):
-        # 初始化模型
-        model_args = {
-            "weight_dir" : self.weight_dir,
-            "max_total_token_num" : self.max_total_token_num,
-            "max_req_num" : self.max_req_num + 8, # 最大同时发起的请求数
-            "max_seq_length" : self.max_req_total_len + 8, # 最大的请求长度
-            "return_all_prompt_logprobs" : False,
-            "parallel_config_llama" : self.parallel_config_llama,
-        }
-        self.model_rpc_server.init_model(self.model_llama_config, model_args)
+    async def wait_to_model_ready(self):
+
+        logger.info(f"world size: {self.parallel_config_llama.world_size}")
+
+        self.model_rpcs: List[ModelRpcClient] = []
+        for host in self.hosts:
+            for port in [self.port_config.rpc_base_port + i for i in range(2)]:  # 我他妈直接写死
+                rpc_model = await connect_to_model_rpc_client(host, port, world_size=self.parallel_config_llama.world_size)
+                self.model_rpcs.append(rpc_model)
+        
+        init_model_ret = []
+        for rank_id in range(self.parallel_config_llama.world_size):
+            # 初始化模型
+            model_args = {
+                "weight_dir" : self.weight_dir,
+                "max_total_token_num" : self.max_total_token_num,
+                "max_req_num" : self.max_req_num + 8, # 最大同时发起的请求数
+                "max_seq_length" : self.max_req_total_len + 8, # 最大的请求长度
+                "return_all_prompt_logprobs" : False,
+                "parallel_config_llama" : (
+                    self.parallel_config_llama.pipeline_parallel_size,
+                    self.parallel_config_llama.tensor_parallel_size,
+                ),
+                "seed": 0,
+                "rank_id": rank_id,
+            }
+            init_model_ret.append(self.model_rpcs[rank_id].init_model(self.model_llama_config, model_args))
+        
+        await asyncio.gather(*init_model_ret)
 
         self._init_prompt_cache()
 
@@ -160,7 +185,7 @@ class RouterManager:
         counter_count = 0
         logger.info("start loop_for_fwd")
         while True:
-            self._step()
+            await self._step()
             counter_count += 1
             if self.running_batch is not None:
                 if counter_count % 50 == 0:
@@ -176,7 +201,7 @@ class RouterManager:
                 await asyncio.sleep(0.01)  # 10ms
                 
 
-    def _step(self):
+    async def _step(self):
         """
         事件处理循环
         """
@@ -185,9 +210,8 @@ class RouterManager:
         if self.running_batch is None:
             new_batch = self.req_queue.generate_new_batch(self.running_batch)
             if new_batch is not None:
-                logger.info(f"new_batch: {new_batch.batch_id}, requests count: {len(new_batch.reqs)}")
                 self.running_batch = new_batch
-                self._prefill_batch(self.running_batch)
+                await self._prefill_batch(self.running_batch)
                 self._filter_running_batch()
                 self.has_wait_tokens = 0
             return
@@ -197,40 +221,52 @@ class RouterManager:
             new_mini_batch = self.req_queue.generate_new_batch(self.running_batch)
             self.has_wait_tokens = 0
             if new_mini_batch is not None:
-                self._prefill_batch(new_mini_batch)
+                await self._prefill_batch(new_mini_batch)
                 if not new_mini_batch.is_clear():
-                    self._merge_batch(self.running_batch, new_mini_batch)
+                    await self._merge_batch(self.running_batch, new_mini_batch)
                     self.running_batch.merge(new_mini_batch)
                 return
 
         # 正常 decode 阶段， 如果可以直接decode就直接decode，否则通过暂停策略暂停一些请求
         # 释放一些管理的 token
         if self._can_decode(self.running_batch):
-            self._decode_batch(self.running_batch)
+            await self._decode_batch(self.running_batch)
             self._filter_running_batch()
             self.has_wait_tokens += 1
             return
         else:
             # pause strategy
             paused_reqs = select_paused_reqs(self.running_batch, self.pause_strategy, self.req_queue, self.max_total_token_num)
-            self._pause_reqs(self.running_batch, paused_reqs)
+            await self._pause_reqs(self.running_batch, paused_reqs)
             self.has_wait_tokens = 0   
             return
         return
 
-    def _init_batch(self, batch: Batch):
+    async def _init_batch(self, batch: Batch):
         reqs = batch.reqs
-        ret = self.model_rpc_server.add_batch(batch.batch_id, reqs, "fp16")
-        req_to_req_status = ret
+        rets = [self.model_rpcs[tp_rank].init_batch(batch.batch_id, reqs)
+               for tp_rank in range(self.parallel_config_llama.world_size)]
+        ans = await asyncio.gather(*rets)
+        if self.parallel_config_llama.world_size != 1:
+            req_to_req_status = obtain(ans[0])
+        else:
+            req_to_req_status = ans[0]
         
         self._update_init_status_to_batch(batch, req_to_req_status)
         return
 
-    def _prefill_batch(self, batch:Batch):
-        self._init_batch(batch)
+    async def _prefill_batch(self, batch:Batch):
+        logger.info("Prefilling batch")
+        await self._init_batch(batch)
         # 在 非 splitfuse 模式下，才需要真的执行 prefill 的操作。
-        ret = self.model_rpc_server.prefill_batch(batch.batch_id)
-        req_to_out_status = ret
+        rets = [self.model_rpcs[tp_rank].prefill_batch(batch.batch_id)
+               for tp_rank in range(self.parallel_config_llama.world_size)]
+        ans = await asyncio.gather(*rets)
+        if self.parallel_config_llama.world_size != 1:
+            req_to_out_status = obtain(ans[0])
+        else:
+            req_to_out_status = ans[0]
+
 
         self._update_out_status_to_batch(batch, req_to_out_status)
         unfinished_req_ids, finished_req_ids = batch.mark_and_get_finished_req_and_preupdate_status(self.eos_id)
@@ -243,12 +279,20 @@ class RouterManager:
         for res in detokenize_res:
             self.send_to_req_server.send_pyobj(res)
         batch.filter_out_finished_req(unfinished_req_ids, finished_req_ids)
-        self._handle_finish_req(batch, unfinished_req_ids, finished_req_ids)
+        await self._handle_finish_req(batch, unfinished_req_ids, finished_req_ids)
         return
 
 
-    def _decode_batch(self, batch:Batch):
-        req_to_out_status = self.model_rpc_server.decode_batch(batch.batch_id)
+    async def _decode_batch(self, batch:Batch):
+        logger.info("Decoding batch")
+        rets = [self.model_rpcs[tp_rank].decode_batch(batch.batch_id)
+                for tp_rank in range(self.parallel_config_llama.world_size)]
+        ans = await asyncio.gather(*rets)
+        if self.parallel_config_llama.world_size != 1:
+            req_to_out_status = obtain(ans[0])
+        else:
+            req_to_out_status = ans[0]
+
 
         self._update_out_status_to_batch(batch, req_to_out_status)
         unfinished_req_ids, finished_req_ids = batch.mark_and_get_finished_req_and_preupdate_status(self.eos_id)
@@ -260,32 +304,37 @@ class RouterManager:
         for res in detokenize_res:
             self.send_to_req_server.send_pyobj(res)
         batch.filter_out_finished_req(unfinished_req_ids, finished_req_ids)
-        self._handle_finish_req(batch, unfinished_req_ids, finished_req_ids)
+        await self._handle_finish_req(batch, unfinished_req_ids, finished_req_ids)
         return
 
-    def _filter_batch(self, batch: Batch, unfinished_req_ids, finished_req_ids: List):
-        self.model_rpc_server.filter_batch(batch.batch_id, unfinished_req_ids, finished_req_ids)
+    async def _filter_batch(self, batch: Batch, unfinished_req_ids, finished_req_ids: List):
+        rets = [self.model_rpcs[tp_rank].filter_batch(batch.batch_id, unfinished_req_ids, finished_req_ids)
+                for tp_rank in range(self.parallel_config_llama.world_size)]
+        await asyncio.gather(*rets)
         return
 
-    def _merge_batch(self, batch1: Batch, batch2: Batch):
-        self.model_rpc_server.merge_batch(batch1.batch_id, batch2.batch_id)
+    async def _merge_batch(self, batch1: Batch, batch2: Batch):
+        rets = [self.model_rpcs[tp_rank].merge_batch(batch1.batch_id, batch2.batch_id) for tp_rank in range(self.parallel_config_llama.world_size)]
+        await asyncio.gather(*rets)
         return
 
-    def _remove_batch(self, batch: Batch):
-        self.model_rpc_server.remove_batch(batch.batch_id)
+    async def _remove_batch(self, batch: Batch):
+        rets = [self.model_rpcs[tp_rank].remove_batch(batch.batch_id) for tp_rank in range(self.parallel_config_llama.world_size)]
+        await asyncio.gather(*rets)
         return
     
-    def _pause_reqs(self, batch: Batch, pasue_reqs: List[Req]):
+    async def _pause_reqs(self, batch: Batch, pasue_reqs: List[Req]):
         pasue_reqs_info = [(r.request_id, r.req_status) for r in pasue_reqs]
-        self.model_rpc_server.pause_reqs(batch.batch_id, pasue_reqs_info)
+        rets = [self.model_rpcs[tp_rank].pause_reqs(batch.batch_id, pasue_reqs_info) for tp_rank in range(self.parallel_config_llama.world_size)]
+        await asyncio.gather(*rets)
         return
 
-    def _handle_finish_req(self, batch: Batch, unfinished_req_ids, finished_req_ids):
+    async def _handle_finish_req(self, batch: Batch, unfinished_req_ids, finished_req_ids):
         if len(finished_req_ids) != 0:
             if batch.is_clear():
-                self._remove_batch(batch)
+                await self._remove_batch(batch)
             else:
-                self._filter_batch(batch, unfinished_req_ids, finished_req_ids)
+                await self._filter_batch(batch, unfinished_req_ids, finished_req_ids)
         return
 
     def _filter_running_batch(self):
@@ -394,9 +443,9 @@ def start_router_process(
         max_req_total_len,
         router_token_ratio,
         router_max_new_token_len,
-        router_port,
-        req_port,
+        port_config,
         parallel_config_llama,
+        hosts,
         pipe_writer
     ):
     '''Helper function to start router process.
@@ -423,11 +472,11 @@ def start_router_process(
             max_req_total_len,
             router_token_ratio,
             router_max_new_token_len,
-            router_port,
-            req_port,
-            parallel_config_llama
+            port_config,
+            parallel_config_llama,
+            hosts
         )
-        router.wait_to_model_ready()
+        asyncio.run(router.wait_to_model_ready())
     except Exception as e:
         import traceback
         import sys
@@ -444,3 +493,17 @@ def start_router_process(
     loop.create_task(router.loop_for_fwd())
     loop.run_until_complete(router.loop_for_netio_req())
     return
+
+
+async def connect_to_model_rpc_client(host, port, world_size):
+    repeat_count = 0
+    while repeat_count < 20:
+        try:
+            con = rpyc.connect(host, port, config={"allow_pickle": True})
+            break
+        except BaseException:
+            await asyncio.sleep(1)
+        repeat_count += 1
+    if repeat_count == 20:
+        raise Exception("init rpc env error!")
+    return ModelRpcClient(con.root, world_size)
