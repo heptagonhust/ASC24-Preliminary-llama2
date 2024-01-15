@@ -589,7 +589,16 @@ class LlamaForCausalLM(nn.Module):
         input_embedding = None
         last_input = einops.rearrange(last_input, "batch embed_dim -> embed_dim batch").contiguous().reshape(-1, token_num)
         logic_batch = torch.mm(self.lm_head.weight, last_input)
-        gather_data = logic_batch
+
+        
+        gather_data = None
+        if self.world_size == 1:
+            gather_data = logic_batch
+        else:
+            gather_data = torch.empty((self.vocab_size, token_num), device=logic_batch.device, dtype=torch.float16)
+            split_size = self.vocab_size // self.world_size
+            dist.all_gather([gather_data[i * split_size: (i + 1) * split_size, :]
+                            for i in range(self.world_size)], logic_batch, group=None, async_op=False)
 
         logic_batch = None
 
