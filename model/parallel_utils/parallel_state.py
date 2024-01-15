@@ -15,7 +15,7 @@ _PIPELINE_MODEL_PARALLEL_GROUP = None
 _PIPELINE_GLOBAL_RANKS = None
 
 
-def initialize_model_parallel(
+def initialize_calculator_parallel(
     tensor_model_parallel_size: int = 1,
     pipeline_model_parallel_size: int = 1,
 ) -> None:
@@ -44,6 +44,9 @@ def initialize_model_parallel(
     # Get world size and rank. Ensure some consistencies.
     assert dist.is_initialized()
     world_size: int = dist.get_world_size()
+    assert world_size % 3 == 0, \
+        "world_size is not divisible by 3"
+    world_size = world_size // 3
 
     if (world_size !=
             tensor_model_parallel_size * pipeline_model_parallel_size):  # 2 * 3
