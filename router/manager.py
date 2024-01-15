@@ -15,6 +15,7 @@ from model.parallel_utils.parallel_state import setup_distributed
 import zmq
 import zmq.asyncio
 import asyncio
+import multiprocessing as mp
 
 from utils.log_utils import init_logger
 
@@ -49,6 +50,8 @@ class RouterManager:
             router_port,
             req_port,
             parallel_config_llama: ParallelConfig,
+            queue1,
+            queue2,
         ):
         self.batch_size = batch_size
         self.weight_dir = model_dir
@@ -78,22 +81,24 @@ class RouterManager:
         self.model_rpc_server = ModelRpcServer()
 
         self.parallel_config_llama = parallel_config_llama
+        
+        self.queue1 = queue1  # recv_from_req_server
+        self.queue2 = queue2  # send_to_req_server
 
-        context = zmq.asyncio.Context(2)
+        # context = zmq.asyncio.Context(2)
 
-        # tp_rank = get_tensor_model_parallel_rank()
-        self.recv_from_req_server = context.socket(zmq.PULL)
-        try:
-            self.recv_from_req_server.bind(f"tcp://127.0.0.1:{router_port}")
-        except Exception as e:
-            self.recv_from_req_server.bind(f"tcp://127.0.0.1:{router_port + 2}")
+        # self.recv_from_req_server = context.socket(zmq.PULL)
+        # try:
+        #     self.recv_from_req_server.bind(f"tcp://127.0.0.1:{router_port}")
+        # except Exception as e:
+        #     self.recv_from_req_server.bind(f"tcp://127.0.0.1:{router_port + 2}")
 
 
-        self.send_to_req_server = context.socket(zmq.PUSH)
-        try:
-            self.send_to_req_server.connect(f"tcp://127.0.0.1:{req_port}")
-        except Exception as e:
-            self.send_to_req_server.connect(f"tcp://127.0.0.1:{req_port + 2}")
+        # self.send_to_req_server = context.socket(zmq.PUSH)
+        # try:
+        #     self.send_to_req_server.connect(f"tcp://127.0.0.1:{req_port}")
+        # except Exception as e:
+        #     self.send_to_req_server.connect(f"tcp://127.0.0.1:{req_port + 2}")
 
 
         return
@@ -142,7 +147,7 @@ class RouterManager:
         prompt_cache_len, 
         prompt_cache_req_id
     ):
-        # logger.info(f"add_req: {request_id}")
+        logger.info(f"add_req: {request_id}")
         req = NormalReq(request_id, prompt_ids, sampling_params,
                             prompt_cache_len, prompt_cache_req_id)
         self.req_queue.append(req)
@@ -191,7 +196,9 @@ class RouterManager:
         """
         # 删除所有已经 finished 的 req
         # 当前无运行请求时
+        logger.info(f"_step")
         if self.running_batch is None:
+            logger.info(f"generate_new_batch1")
             new_batch = self.req_queue.generate_new_batch(self.running_batch)
             if new_batch is not None:
                 logger.info(f"new_batch: {new_batch.batch_id}, requests count: {len(new_batch.reqs)}")
@@ -203,6 +210,7 @@ class RouterManager:
 
         # 有运行请求，但是已经到了可以调度新的请求合并推理的时机
         if self.has_wait_tokens >= self.max_wait_tokens:
+            logger.info(f"generate_new_batch2")
             new_mini_batch = self.req_queue.generate_new_batch(self.running_batch)
             self.has_wait_tokens = 0
             if new_mini_batch is not None:
@@ -214,6 +222,7 @@ class RouterManager:
 
         # 正常 decode 阶段， 如果可以直接decode就直接decode，否则通过暂停策略暂停一些请求
         # 释放一些管理的 token
+        logger.info(f"_can_decode")
         if self._can_decode(self.running_batch):
             self._decode_batch(self.running_batch)
             self._filter_running_batch()
@@ -236,6 +245,7 @@ class RouterManager:
         return
 
     def _prefill_batch(self, batch:Batch):
+        logger.info(f"_prefill_batch")
         self._init_batch(batch)
         # 在 非 splitfuse 模式下，才需要真的执行 prefill 的操作。
         ret = self.model_rpc_server.prefill_batch(batch.batch_id)
@@ -250,13 +260,14 @@ class RouterManager:
         detokenize_res = self._detokenize(batch, req_to_out_status)
         logger.info(f"detokenize_res: {detokenize_res}")
         for res in detokenize_res:
-            self.send_to_req_server.send_pyobj(res)
+            self.queue2.put(res)
         batch.filter_out_finished_req(unfinished_req_ids, finished_req_ids)
         self._handle_finish_req(batch, unfinished_req_ids, finished_req_ids)
         return
 
 
     def _decode_batch(self, batch:Batch):
+        logger.info(f"_decode_batch")
         req_to_out_status = self.model_rpc_server.decode_batch(batch.batch_id)
 
         self._update_out_status_to_batch(batch, req_to_out_status)
@@ -267,7 +278,7 @@ class RouterManager:
         detokenize_res = self._detokenize(batch, req_to_out_status)
         logger.info(f"detokenize_res: {detokenize_res}")
         for res in detokenize_res:
-            self.send_to_req_server.send_pyobj(res)
+            self.queue2.put(res)
         batch.filter_out_finished_req(unfinished_req_ids, finished_req_ids)
         self._handle_finish_req(batch, unfinished_req_ids, finished_req_ids)
         return
@@ -382,7 +393,13 @@ class RouterManager:
         
     async def loop_for_netio_req(self):
         while True:
-            recv_req = await self.recv_from_req_server.recv_pyobj()
+            try:
+                recv_req = self.queue1.get_nowait()
+            except mp.queues.Empty:
+                await asyncio.sleep(0.1)
+                continue
+                
+            logger.info(f"recv_req: {recv_req}")
             if isinstance(recv_req, tuple) and len(recv_req) == 5:
                 request_id, prompt_ids, sampling_params, prompt_cache_len, prompt_cache_req_id = recv_req
                 self.add_req(request_id, prompt_ids, sampling_params, prompt_cache_len, prompt_cache_req_id)
@@ -406,7 +423,9 @@ def start_router_process(
         router_port,
         req_port,
         parallel_config_llama,
-        pipe_writer
+        pipe_writer,
+        queue1,
+        queue2,
     ):
     '''Helper function to start router process.
 
@@ -422,7 +441,7 @@ def start_router_process(
         router_port: router的端口
         req_server_port: req_server的端口
     '''
-    setup_distributed(parallel_config=parallel_config_llama)
+    # setup_distributed(parallel_config=parallel_config_llama)
     try:
         router = RouterManager(
             model_dir,
@@ -435,7 +454,9 @@ def start_router_process(
             router_max_new_token_len,
             router_port,
             req_port,
-            parallel_config_llama
+            parallel_config_llama,
+            queue1,
+            queue2,
         )
         router.wait_to_model_ready()
     except Exception as e:

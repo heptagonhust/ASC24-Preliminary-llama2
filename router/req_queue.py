@@ -27,6 +27,7 @@ class ReqQueue:
         self.prompt_cache_req_num = prompt_cache_req_num
         
     def append(self, req):
+        logger.info(f"ReqQueue append:{req}")
         self.waiting_req_list.append(req)
         return
     
@@ -79,7 +80,9 @@ class ReqQueue:
         req_is_full = exist_req_num >= self.running_max_req_size
         if req_is_full:
             return None
-        
+
+        logger.info(f"req_is_not_full")
+
         # 计算当前所有的token使用量，包括当前使用和暂停的
         cur_all_used_tokens = 0 if current_batch is None else current_batch.batch_used_tokens
         cur_all_used_tokens += self.recalcu_pause_req_used_tokens() + self.prompt_cache_used_tokens
@@ -102,6 +105,7 @@ class ReqQueue:
         aborted_count = 0
         for req in self.waiting_req_list:
             if req.aborted and req.req_status == ReqRunStatus.WAIT_IN_QUEUE: 
+                logger.info(f"{req.aborted},{req.req_status}")
                 # 由于管理的复杂性，只有没有被调度运行过的请求可以因为abort直接在队列中忽略掉. 
                 # 暂停的请求需要恢复后，由 router manager 部分来过滤。暂时保持这种处理方法, 否则会导致管理token的泄漏
                 aborted_count += 1
@@ -119,7 +123,7 @@ batch_max_tokens: {self.batch_max_tokens}""")
                     self.pause_req_dict.pop(req.request_id)
             else:
                 break
-
+        logger.info(f"can_run_list:{can_run_list}")
         if len(can_run_list) != 0:
             new_batch = Batch(uuid.uuid4().hex, can_run_list)
             self.waiting_req_list = self.waiting_req_list[len(can_run_list) + aborted_count:]

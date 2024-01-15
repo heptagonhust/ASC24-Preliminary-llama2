@@ -10,7 +10,7 @@ from model.parallel_utils.parallel_state import setup_distributed
 
 if __name__ == "__main__":
     model_config_llama = ModelConfig("/data/7B-chat-hf", "/data/7B-chat-hf", True, 1, None)
-    parallel_config_llama = ParallelConfig(pipeline_parallel_size = 1, tensor_parallel_size = 2)
+    parallel_config_llama = ParallelConfig(pipeline_parallel_size = 1, tensor_parallel_size = 1)
     port_config = PortConfig(router_port=55555, req_server_port=55556)
     sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
     req_config = ReqConfig(batch_size=10000,
@@ -40,7 +40,7 @@ if __name__ == "__main__":
         router_port: router的端口
         req_server_port: req_server的端口
     '''
-    submodule_pid = start_submodule_processes(
+    submodule_pid,queues = start_submodule_processes(
         start_funcs=[start_router_process],
         start_args=[(
             model_config_llama.model,
@@ -57,6 +57,7 @@ if __name__ == "__main__":
         )]
     )
 
+    LLama.setqueue(queues)
     LLama.generate(requests, sampling_params=sampling_params)
 
     kill_submodule_processes(submodule_pid)

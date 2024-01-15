@@ -25,6 +25,7 @@ from model.parallel_utils.parallel_state import setup_distributed
 from model.parallel_utils.parallel_state import get_tensor_model_parallel_rank
 
 import utils.log_utils as log_utils
+import multiprocessing as mp
 
 logger = log_utils.init_logger(__name__)
 
@@ -51,19 +52,19 @@ class RequestEngine():
         # tp_rank = get_tensor_model_parallel_rank()
         tp_rank = 0
 
-        context = zmq.asyncio.Context(2)
-        self.send_to_router = context.socket(zmq.PUSH)
-        try:
-            self.send_to_router.connect(f"tcp://127.0.0.1:{port_config.router_port + tp_rank * 2}")
-        except Exception as e:
-            self.send_to_router.connect(f"tcp://127.0.0.1:{port_config.router_port + 2}")
+        # context = zmq.asyncio.Context(2)
+        # self.send_to_router = context.socket(zmq.PUSH)
+        # try:
+        #     self.send_to_router.connect(f"tcp://127.0.0.1:{port_config.router_port + tp_rank * 2}")
+        # except Exception as e:
+        #     self.send_to_router.connect(f"tcp://127.0.0.1:{port_config.router_port + 2}")
 
 
-        self.recv_from_router = context.socket(zmq.PULL)
-        try:
-            self.recv_from_router.bind(f"tcp://127.0.0.1:{port_config.req_server_port + tp_rank * 2}")
-        except Exception as e:
-            self.recv_from_router.bind(f"tcp://127.0.0.1:{port_config.req_server_port + 2}")
+        # self.recv_from_router = context.socket(zmq.PULL)
+        # try:
+        #     self.recv_from_router.bind(f"tcp://127.0.0.1:{port_config.req_server_port + tp_rank * 2}")
+        # except Exception as e:
+        #     self.recv_from_router.bind(f"tcp://127.0.0.1:{port_config.req_server_port + 2}")
 
         
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -76,7 +77,12 @@ class RequestEngine():
 
         self.req_config = req_config
 
+    def setqueue(self,queues):
+        self.queue1 = queues[0] # send_to_router
+        self.queue2 = queues[1] # recv_from_router
+
     async def worker(self, request_id, prompt, prompt_len, output_len):
+        logger.info("worker")
         prompt_ids = self.tokenizer.encode(prompt)
         # special tokenizer for multimodal_params
         prompt_tokens = len(prompt_ids)
@@ -90,15 +96,20 @@ class RequestEngine():
         sampling_params = self.sampling_params
         sampling_params.max_tokens = output_len
 
-        # logger.info(f"sending request_id:{request_id}, output_len:{output_len}")
-        self.send_to_router.send_pyobj((request_id, prompt_ids, sampling_params, 0, None))
+        logger.info(f"sending request_id:{request_id}, output_len:{output_len}")
+        self.queue1.put((request_id, prompt_ids, sampling_params, 0, None))
 
     async def handler(self, request_num):
         '''
         handle the request from the router
         '''
         while request_num > 0:
-            batch_str_out = await self.recv_from_router.recv_pyobj()
+            try:
+                batch_str_out = self.queue2.get_nowait()
+            except mp.queues.Empty:
+                await asyncio.sleep(0.1)
+                continue
+                
             logger.info(f"batch_str_out: {batch_str_out}")
             req_id, out_ids, out_metadata, finished, aborted = batch_str_out
             logger.info(f"req_id:{req_id}, out_ids:{out_ids}, out_metadata:{out_metadata}, finished:{finished}")

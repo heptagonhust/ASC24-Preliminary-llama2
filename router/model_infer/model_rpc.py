@@ -18,7 +18,10 @@ from model.model_metadata import ParallelConfig, ModelConfig
 import random
 import numpy as np
 import contextlib
+import utils.log_utils as log_utils
+import multiprocessing as mp
 
+logger = log_utils.init_logger(__name__)
 
 @contextlib.contextmanager
 def _set_default_torch_dtype(dtype: torch.dtype):
@@ -69,7 +72,7 @@ class ModelRpcServer():
             "parallel_config_llama": self.parallel_config,
         }
 
-        # self._setup_distributed(self.parallel_config)
+        self._setup_distributed(self.parallel_config)
 
         self.dtype = kwargs.get("dtype", torch.float16)
         with _set_default_torch_dtype(self.dtype):
@@ -134,6 +137,7 @@ class ModelRpcServer():
     
     # @calculate_time(show=True, min_cost_ms=150)
     def forward(self, batch_id, is_prefill):
+        logger.info("enter:forward")
         # special code for return all prompt_logprobs
         if self.return_all_prompt_logprobs and is_prefill:
             return self._prefill_to_return_all_prompt_logprobs(batch_id)

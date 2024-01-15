@@ -91,6 +91,7 @@ class LlamaMLP(nn.Module):
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
+        logger.info("LlamaMLP forward")
         gate_up = self.gate_up_proj(x)
         x = self.act_fn(gate_up)
         x = self.down_proj(x)
@@ -184,6 +185,7 @@ class LlamaAttention(nn.Module):
         Returns:
             torch.Tensor: _description_
         """
+        logger.info("LlamaAttention forward")
         #! qkv: [batch_size, seq_len, tp_q_size + 2 * tp_kv_size]
         qkv = self.qkv_proj(hidden_states)
         #! q: [batch_size, seq_len, tp_q_size]
@@ -244,7 +246,7 @@ class LlamaDecoderLayer(nn.Module):
         infer_state: LlamaInferStateInfo,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Self Attention
-        
+        logger.info("LlamaDecoderLayer forward")
         if residual is None:
             residual = hidden_states
             hidden_states = self.input_layernorm(hidden_states)
@@ -296,7 +298,7 @@ class LlamaModel(nn.Module):
         infer_state: LlamaInferStateInfo,
         input_metadata: InputMetadata,
     ) -> torch.Tensor:
-        
+        logger.info("LlamaModel forward")
         hidden_states: torch.Tensor = self.embed_tokens(input_ids)
         residual = None
         for i in range(len(self.layers)):
@@ -418,6 +420,7 @@ class LlamaForCausalLM(nn.Module):
                  max_len_in_batch, input_ids,
                  b_req_idx, b_start_loc, b_seq_len,
                  multimodal_params, positions, input_metadata):
+        logger.info("Llama prefill")
         infer_state = LlamaInferStateInfo()
         infer_state.is_prefill = True
         infer_state.return_all_prompt_logprobs = self.return_all_prompt_logprobs
@@ -461,6 +464,7 @@ class LlamaForCausalLM(nn.Module):
         return hidden_states
     
     def _decode(self, batch_size, total_token_num, max_len_in_batch, input_ids, b_req_idx, b_start_loc, b_seq_len, multimodal_params,positions,input_metadata):
+        logger.info("Llama decode")
         infer_state = LlamaInferStateInfo()
         infer_state.is_prefill = False
         infer_state.batch_size = batch_size
@@ -554,6 +558,7 @@ class LlamaForCausalLM(nn.Module):
         return next_tokens
     
     def _slice_get_last_input(self, input_embdings: torch.Tensor, infer_state: LlamaInferStateInfo):
+        logger.info("slice_get_last_input")
         if infer_state.is_prefill and not infer_state.return_all_prompt_logprobs:
             batch_size = infer_state.batch_size
             last_input = torch.empty((batch_size, input_embdings.shape[-1]),
@@ -585,6 +590,7 @@ class LlamaForCausalLM(nn.Module):
         infer_state: LlamaInferStateInfo,
         return_logits: bool
     ) -> torch.Tensor:
+        logger.info("postlayer_get_embedding")
         last_input, token_num = self._slice_get_last_input(input_embedding, infer_state)
         input_embedding = None
         last_input = einops.rearrange(last_input, "batch embed_dim -> embed_dim batch").contiguous().reshape(-1, token_num)
