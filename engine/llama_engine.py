@@ -8,7 +8,6 @@ import torch.distributed as dist
 
 from utils.distributed_utils import (
     init_distributed,
-    init_distributed_rpc,
 )
 from model.model_metadata import ModelConfig,ParallelConfig
 from model.llama import LlamaForCausalLM
@@ -46,11 +45,8 @@ class LLamaEngine():
                                                rank=self.rank,
                                                tokenizer=self.tokenizer,
                                                device=self.device)
-        print("line: 49")
         self._init_model()
-        print("line: 51")
         self._init_worker()
-        print("line: 53")
 
     def _init_model(self):
         with set_default_torch_dtype(self.model_config.dtype):

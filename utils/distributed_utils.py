@@ -8,8 +8,9 @@ from model.parallel_utils.parallel_state import (
     initialize_model_parallel,
     get_pipeline_model_parallel_rank,
     get_pipeline_model_parallel_group,
-    get_pipeline_model_parallel_world_size,
-    get_tensor_model_parallel_group
+    get_tensor_model_parallel_group,
+    get_pipeline_model_parallel_next_rank,
+    get_pipeline_model_parallel_prev_rank,
 )
 from utils.utils import set_random_seed
 
@@ -23,7 +24,6 @@ def init_distributed(model_config:ModelConfig,
     """
     set_random_seed(model_config.seed)
     num_gpus = torch.cuda.device_count()
-    # os.environ["TORCH_NCCL_AVOID_RECORD_STREAMS"] = "1"
 
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
@@ -45,19 +45,13 @@ def init_distributed(model_config:ModelConfig,
     dist.all_reduce(torch.zeros(1).cuda(), group=get_tensor_model_parallel_group())
     # A small all_reduce for warmup the pp process group
     dist.all_reduce(torch.zeros(1).cuda(), group=get_pipeline_model_parallel_group())
+    #! warmup p2p communication (necessary)
+    for i in range(world_size):
+        if rank == i:
+            dist.send(torch.zeros(1).cuda(), 
+                      get_pipeline_model_parallel_next_rank())
+        elif rank == \
+            (i + parallel_config.tensor_parallel_size) % world_size:
+            dist.recv(torch.zeros(1).cuda(), 
+                      get_pipeline_model_parallel_prev_rank())
     return rank
-
-def init_distributed_rpc(rank: int):
-    world_size = dist.get_world_size()
-    if get_pipeline_model_parallel_rank() == 0:
-        rpc.init_rpc(
-            name=f"master_{rank}",
-            rank=rank,
-            world_size=world_size,
-        )
-    else:
-        rpc.init_rpc(
-            name=f"worker_{rank}",
-            rank=rank,
-            world_size=world_size,
-        )

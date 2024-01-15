@@ -32,7 +32,12 @@ class Worker():
         idx = 0
         while True:
             print(f"rank: {dist.get_rank()}, forward: {idx}, 34")
-            print(f"next_hidden_shape: {next_hidden_shape}")
+            #! debug
+            # t = torch.empty([1], dtype=torch.long, device="cuda")
+            # receive_from_prev_pp_rank(tensor_dtype=torch.long,
+            #                           tensor=t)
+            # print(f"rank {dist.get_rank()}, tensor t: {t}")
+            #! debug
             next_hidden_shape = receive_from_prev_pp_rank(
                                     tensor=next_hidden_shape,
                                     tensor_dtype=torch.long

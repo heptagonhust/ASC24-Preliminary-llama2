@@ -66,7 +66,6 @@ def receive_from_prev_pp_rank(
 ) -> torch.Tensor:
     if tensor is None:
         tensor = torch.empty(tensor_shape, dtype=tensor_dtype, device='cuda')
-    print(f"recv from rank: {get_pipeline_model_parallel_prev_rank()}")
     dist.recv(tensor, get_pipeline_model_parallel_prev_rank())
     return tensor
 
@@ -95,14 +94,14 @@ class pipeline_model_parallel_async_send_and_recv:
                 tensors = [tensors]
             if isinstance(dtypes, torch.dtype):
                 dtypes = [dtypes]
-        elif isinstance(ops, List[str]):
+        elif isinstance(ops, List):
             assert isinstance(tensors, List) == True, \
                 "'tensors' argument should be a list of \
                     torch.Tensor when 'ops' is a list of string"
             assert len(tensors) == len(ops), \
                 "'tensors' argument should have the same length as 'ops'"
             if ops == "recv" and is_shape:
-                assert isinstance(dtypes, List[torch.dtype]) == True, \
+                assert isinstance(dtypes, List) == True, \
                     "'dtypes' argument should be a list of \
                         torch.dtype when 'ops' is a list of string \
                         and is_shape is True"
@@ -146,7 +145,7 @@ class pipeline_model_parallel_async_send_and_recv:
             completed.append(result)
             if not result:
                 all_completed = False
-        return all_completed, completed 
+        return all_completed 
     
     def wait(self):
         for handler in self.handlers:

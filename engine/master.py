@@ -59,7 +59,18 @@ class Master():
                                                 tensor=next_hidden_shape
                                             )
                         print(f"rank: {dist.get_rank()}, forward: {idx}, 59")
-                        #! recv hidden_state, positions, seqs_id from prev node
+
+                print(f"rank: {dist.get_rank()}, forward: {idx}, 74")
+                #! running model
+                hidden_state = self.model(input_ = hidden_state,
+                                          positions = hidden_positions,
+                                          kv_caches = None,
+                                          input_metadata = None)
+
+                print(f"rank: {dist.get_rank()}, forward: {idx}, 81")
+                if recv_stream.query():
+#! recv hidden_state, positions, seqs_id from prev node
+                    with torch.cuda.stream(recv_stream):
                         next_hidden_receiver = \
                             pipeline_model_parallel_async_send_and_recv(
                                 ops=["recv", "recv", "recv"],
@@ -75,14 +86,8 @@ class Master():
                         recv_hidden_state, recv_positions, recv_seqs_id = \
                             next_hidden_receiver.wait()
 
-                print(f"rank: {dist.get_rank()}, forward: {idx}, 74")
-                #! running model
-                hidden_state = self.model(input_ = hidden_state,
-                                          positions = hidden_positions,
-                                          kv_caches = None,
-                                          input_metadata = None)
-
-                print(f"rank: {dist.get_rank()}, forward: {idx}, 81")
+                print(f"rank: {dist.get_rank()}, forward: {idx}, 88")
+                
                 torch.cuda.default_stream().wait_stream(send_stream)
                 last_hidden_state = hidden_state
                 last_hidden_positions = hidden_positions
@@ -104,8 +109,10 @@ class Master():
                 print(f"rank: {dist.get_rank()}, forward: {idx}, 99")
 
 
+
+
             # print(f"rank: {dist.get_rank()}, forward: {idx}, 86")
-            if not recv_stream.query() or hidden_state is None:
+            if hidden_state is None or not recv_stream.query():
                 hidden_state, hidden_positions, seqs_id = self.scheduler.get_new_batch()
             else:
                 torch.cuda.default_stream().wait_stream(recv_stream)
