@@ -8,6 +8,8 @@ from router.io_struct import BatchTokenIdOut, AbortReq, ReqRunStatus, ReqDetoken
 from router.pause_strategy import Fcfs, select_paused_reqs
 
 from transformers import AutoTokenizer
+from model.parallel_utils.parallel_state import get_tensor_model_parallel_rank
+from model.parallel_utils.parallel_state import setup_distributed
 
 
 import zmq
@@ -79,11 +81,20 @@ class RouterManager:
 
         context = zmq.asyncio.Context(2)
 
+        # tp_rank = get_tensor_model_parallel_rank()
         self.recv_from_req_server = context.socket(zmq.PULL)
-        self.recv_from_req_server.bind(f"tcp://127.0.0.1:{router_port}")
+        try:
+            self.recv_from_req_server.bind(f"tcp://127.0.0.1:{router_port}")
+        except Exception as e:
+            self.recv_from_req_server.bind(f"tcp://127.0.0.1:{router_port + 2}")
+
 
         self.send_to_req_server = context.socket(zmq.PUSH)
-        self.send_to_req_server.connect(f"tcp://127.0.0.1:{req_port}")
+        try:
+            self.send_to_req_server.connect(f"tcp://127.0.0.1:{req_port}")
+        except Exception as e:
+            self.send_to_req_server.connect(f"tcp://127.0.0.1:{req_port + 2}")
+
 
         return
 
@@ -411,6 +422,7 @@ def start_router_process(
         router_port: router的端口
         req_server_port: req_server的端口
     '''
+    setup_distributed(parallel_config=parallel_config_llama)
     try:
         router = RouterManager(
             model_dir,

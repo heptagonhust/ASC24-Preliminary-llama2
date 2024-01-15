@@ -5,15 +5,16 @@ from sampler.sampling_metadata import SamplingParams
 import json
 from utils.start_utils import start_submodule_processes, kill_submodule_processes
 from router.manager import start_router_process
+from model.parallel_utils.parallel_state import setup_distributed
 
 
 if __name__ == "__main__":
     model_config_llama = ModelConfig("/data/7B-chat-hf", "/data/7B-chat-hf", True, 1, None)
-    parallel_config_llama = ParallelConfig(pipeline_parallel_size = 1, tensor_parallel_size = 1)
+    parallel_config_llama = ParallelConfig(pipeline_parallel_size = 1, tensor_parallel_size = 2)
     port_config = PortConfig(router_port=55555, req_server_port=55556)
     sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
     req_config = ReqConfig(batch_size=10000,
-                           max_total_token_num=20000,
+                           max_total_token_num=50000,
                            max_req_num=10000,
                            max_req_total_len=2048+512,
                            router_token_ratio=0.5,

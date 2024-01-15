@@ -21,7 +21,8 @@ import asyncio
 import heapq
 import zmq
 import zmq.asyncio
-
+from model.parallel_utils.parallel_state import setup_distributed
+from model.parallel_utils.parallel_state import get_tensor_model_parallel_rank
 
 import utils.log_utils as log_utils
 
@@ -46,14 +47,24 @@ class RequestEngine():
         self.results_queue = []
 
         self.sampling_params = sampling_params
+        # setup_distributed(parallel_config_llama)
+        # tp_rank = get_tensor_model_parallel_rank()
+        tp_rank = 0
 
         context = zmq.asyncio.Context(2)
         self.send_to_router = context.socket(zmq.PUSH)
-        self.send_to_router.connect(f"tcp://127.0.0.1:{port_config.router_port}")
+        try:
+            self.send_to_router.connect(f"tcp://127.0.0.1:{port_config.router_port + tp_rank * 2}")
+        except Exception as e:
+            self.send_to_router.connect(f"tcp://127.0.0.1:{port_config.router_port + 2}")
 
 
         self.recv_from_router = context.socket(zmq.PULL)
-        self.recv_from_router.bind(f"tcp://127.0.0.1:{port_config.req_server_port}")
+        try:
+            self.recv_from_router.bind(f"tcp://127.0.0.1:{port_config.req_server_port + tp_rank * 2}")
+        except Exception as e:
+            self.recv_from_router.bind(f"tcp://127.0.0.1:{port_config.req_server_port + 2}")
+
         
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_config.model,

@@ -69,7 +69,7 @@ class ModelRpcServer():
             "parallel_config_llama": self.parallel_config,
         }
 
-        self._setup_distributed(self.parallel_config)
+        # self._setup_distributed(self.parallel_config)
 
         self.dtype = kwargs.get("dtype", torch.float16)
         with _set_default_torch_dtype(self.dtype):
