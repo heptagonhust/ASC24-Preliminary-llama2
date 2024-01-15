@@ -49,11 +49,13 @@ class RequestEngine():
 
         context = zmq.asyncio.Context(2)
         self.send_to_router = context.socket(zmq.PUSH)
-        self.send_to_router.connect(f"tcp://127.0.0.1:{port_config.router_port}")
+        self.send_to_router.connect(f"ipc:///tmp/router.ipc")
+        # self.send_to_router.connect(f"tcp://127.0.0.1:{port_config.router_port}")
 
 
         self.recv_from_router = context.socket(zmq.PULL)
-        self.recv_from_router.bind(f"tcp://127.0.0.1:{port_config.req_server_port}")
+        self.recv_from_router.bind(f"ipc:///tmp/req_server.ipc")
+        # self.recv_from_router.bind(f"tcp://127.0.0.1:{port_config.req_server_port}")
         
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_config.model,

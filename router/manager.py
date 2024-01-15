@@ -80,10 +80,12 @@ class RouterManager:
         context = zmq.asyncio.Context(2)
 
         self.recv_from_req_server = context.socket(zmq.PULL)
-        self.recv_from_req_server.bind(f"tcp://127.0.0.1:{router_port}")
+        self.recv_from_req_server.bind(f"ipc:///tmp/router.ipc")
+        # self.recv_from_req_server.bind(f"tcp://127.0.0.1:{router_port}")
 
         self.send_to_req_server = context.socket(zmq.PUSH)
-        self.send_to_req_server.connect(f"tcp://127.0.0.1:{req_port}")
+        self.send_to_req_server.connect(f"ipc:///tmp/req_server.ipc")
+        # self.send_to_req_server.connect(f"tcp://127.0.0.1:{req_port}")
 
         return
 
