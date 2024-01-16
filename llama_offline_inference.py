@@ -11,4 +11,4 @@ if __name__ == "__main__":
     with open('./scrambled_sampled_dataset.json') as f:
         requests = json.load(f)
     sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
-    LLama.generate(requests[:500], sampling_params=sampling_params)
+    LLama.generate(requests[:50], sampling_params=sampling_params)

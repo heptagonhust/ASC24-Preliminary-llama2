@@ -1,9 +1,9 @@
 
 class SchedulerConfig:
     def __init__(self,
-                 max_batch_size: int = 16,
+                 max_batch_size: int = 8,
                  max_seq_len: int = 2048,
-                 max_batches: int = 30,
+                 max_batches: int = 4,
                  use_tqdm: bool = True,
                  show_progress: bool = True):
         self.max_batch_size = max_batch_size

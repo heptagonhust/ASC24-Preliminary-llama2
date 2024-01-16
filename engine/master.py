@@ -72,7 +72,7 @@ class Master():
         positions = None
         seqs_id = None
         while not self.scheduler.is_finished():
-            if self.recv_queue.empty() and self.scheduler.more_batches():
+            if self.scheduler.more_batches():
                 hidden_state, positions, seqs_id = self.scheduler.get_new_batch()
             else:
                 recv_hidden_state, recv_positions, recv_seqs_id = self.recv_queue.get()
