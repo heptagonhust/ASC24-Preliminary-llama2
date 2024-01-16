@@ -192,7 +192,7 @@ def get_pipeline_model_parallel_first_last_layer_idx(total_layers: int):
     num_layers = total_layers // pp_world_size
     if pp_rank < pp_world_size - total_layers % pp_world_size:
         first_layer_idx = num_layers * pp_rank
-        last_layer_idx = first_layer_idx * (pp_rank + 1)
+        last_layer_idx = num_layers * (pp_rank + 1)
     else:
         first_layer_idx = total_layers - (num_layers + 1) * (pp_world_size - pp_rank)
         last_layer_idx = total_layers - (num_layers + 1) * (pp_world_size - pp_rank - 1)

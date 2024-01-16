@@ -29,9 +29,9 @@ def initialize_calculator_distributed(
     num_gpus = torch.cuda.device_count()
 
     rank = int(os.environ["RANK"])
-    world_size = int(os.environ["WORLD_SIZE"])
+    calculator_world_size = int(os.environ["WORLD_SIZE"])
+    world_size = calculator_world_size * 3
     print(f'node: {os.environ["SLURM_NODEID"]}, rank: {rank}')
-
     torch.cuda.set_device(rank % num_gpus)
 
     dist.init_process_group(
@@ -78,7 +78,7 @@ def initialize_communicator_distributed(
     else:
         raise ValueError(f"Invalid communicator: {communicator}")
     
-    world_size = calculator_world_size * 3    
+    world_size = calculator_world_size * 3
     
     dist.init_process_group(
         backend=backend,

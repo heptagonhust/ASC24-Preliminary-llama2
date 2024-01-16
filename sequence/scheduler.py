@@ -2,6 +2,7 @@ from typing import List, Dict, Tuple, Union
 from collections import deque
 
 import torch
+import torch.distributed as dist
 from tqdm import tqdm
 from sequence.sequence import (
     SequenceData,
@@ -42,8 +43,8 @@ class SequenceBatch:
         batch._update_seqs_token_ids_position_tensor()
         return batch
 
-    def get_batch_ids(self) -> List[int]:
-        return self.seqs_id
+    def get_batch_ids(self) -> torch.Tensor:
+        return torch.tensor(self.seqs_id, device="cuda")
     
     def get_seq_id_from_idx(self, idx: int):
         return self.seqs_id[idx]
@@ -68,12 +69,12 @@ class SequenceBatch:
                 seq_data.append_token_id(seq_output.output_token,
                                          seq_output.logprobs[seq_output.output_token])
                 if seq_output.output_token == self.tokenizer.eos_token_id or \
-                   seq_data.get_len() >= seq_max_output_len:
+                   seq_data.get_output_len() >= seq_max_output_len:
                     finished_idx.append(idx)
                     has_finished = True
         if not has_finished:
             self._update_seqs_token_ids_position_tensor()
-        return finished_idx
+        return finished_idx, has_finished
 
     def _update_seqs_token_ids_position_tensor(self):
         input_token = [
@@ -100,7 +101,8 @@ class SequenceBatch:
                      requests_id: List[int], 
                      requests: List[Tuple[str, int, int]],
                      idx: List[int]):
-        for i, seq_id, prompt, prompt_len, output_len in zip(idx, requests_id, *requests):
+        for i, seq_id, request in zip(idx, requests_id, requests):
+            prompt, prompt_len, output_len = request
             if (seq_id != -1):
                 prompt_token_ids = self.tokenizer.encode(prompt)
                 seq_data = SequenceData(prompt_token_ids)
@@ -112,8 +114,6 @@ class SequenceBatch:
                 self.seqs_id.pop(i)
                 self.seqs_max_output_len.pop(i)
         self._update_seqs_token_ids_position_tensor()
-        
-
 
 class SequenceScheduler:
     def __init__(self,
@@ -140,6 +140,13 @@ class SequenceScheduler:
                                    +len(self.running_queue)
                                    +len(self.finished_queue), 
                              desc="Processed prompts")
+    
+    def more_batches(self):
+        if len(self.batches) < self.config.max_batches and \
+            len(self.waiting_queue) > 0:
+            return True
+        else:
+            return False
     
     def get_n_requests(self, 
                        n: int
@@ -172,11 +179,12 @@ class SequenceScheduler:
                                            sampling_params: SamplingParams):
         for batch in self.batches:
             if seqs_id[0] in batch.get_batch_ids():
-                prepare_sample(
+                return prepare_sample(
                     seqs_id=seqs_id,
                     seqs_data=batch.seqs_data,
                     sampling_params=sampling_params,
                 )
+        raise ValueError(f"seqs_id {seqs_id} not found in any batch")
 
     def update_batch(self,
                      seqs_id: List[int],
@@ -192,7 +200,9 @@ class SequenceScheduler:
                         self.finished_queue[seq_id] = self.running_queue.pop(seq_id)
                         if self.config.show_progress:
                             self.show_progress(seq_data)
-
+                    if self.is_finished():
+                        return None, None, None
+                        
                     requests, requests_id, n = self.get_n_requests(len(finished_idx))
                     if n < len(finished_idx):
                         requests += [(None, None, None)] * (len(finished_idx) - n)
@@ -200,15 +210,16 @@ class SequenceScheduler:
                     batch.replace_seqs(requests_id=requests_id, 
                                        requests=requests,
                                        idx=finished_idx)
-                return zip(*batch.get_seqs_token_ids_position(), batch.get_batch_ids())
+                token_id, positions = batch.get_seqs_token_ids_position()
+                return token_id, positions, batch.get_batch_ids()
         raise ValueError(f"seqs_id {seqs_id} not found in any batch")
     
     def show_progress(self, seq_data: SequenceData):
         if self.rank == 0:
             prompt = self.tokenizer.decode(seq_data.prompt_token_ids)
             output = self.tokenizer.decode(seq_data.output_token_ids)
-            print(f'input: {prompt}\ninput_len: {len(prompt)}\n')
-            print(f'output: {output}\noutput_len: {len(output)}\n\n')
+            print(f'input: {prompt}\ninput_len: {seq_data.get_prompt_len()}\n')
+            print(f'output: {output}\noutput_len: {seq_data.get_output_len()}\n\n')
             if self.config.use_tqdm:
                 self.pbar.update(1)
 

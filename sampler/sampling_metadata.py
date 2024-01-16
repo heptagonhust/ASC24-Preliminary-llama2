@@ -285,7 +285,7 @@ def prepare_sample(
     seqs_data: List[SequenceData],
     sampling_params: SamplingParams,
 ) -> SamplingMetadata:
-        #! storn sampling param of all seq_groups in seq_group_metadata_list
+        #! store sampling param of all seq_groups in seq_group_metadata_list
         seq_groups: List[Tuple[List[int], SamplingParams]] = [
             ([seq_id], sampling_params) for seq_id in seqs_id
         ]
@@ -319,7 +319,7 @@ def prepare_sample(
         selected_token_indices = _async_h2d(selected_token_indices,
                                             dtype=torch.long,
                                             pin_memory=True)
-        
+
         sampling_metadata = SamplingMetadata(
             seq_groups=seq_groups,
             seq_data=seq_data_dict,

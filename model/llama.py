@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import re
 import torch
+import torch.distributed as dist
 from torch import nn
 from transformers import LlamaConfig
 
@@ -318,7 +319,7 @@ class LlamaForCausalLM(nn.Module):
         self.dtype  = torch.get_default_dtype()
         self.pp_size = get_pipeline_model_parallel_world_size()
         self.pp_rank = get_pipeline_model_parallel_rank()
-        if self.pp_rank == self.pp_size - 1:
+        if self.pp_rank == 0:
             self.lm_head = ParallelLMHead(config.vocab_size, config.hidden_size)
             self.sampler = Sampler(config.vocab_size)
 
@@ -375,8 +376,6 @@ class LlamaForCausalLM(nn.Module):
                 continue
             if ("rotary_emb.cos_cached" in name
                     or "rotary_emb.sin_cached" in name):
-                # Models trained using ColossalAI may include these tensors in
-                # the checkpoint. Skip them.
                 continue
             for (param_name, weight_name, shard_id) in stacked_params_mapping:
                 if weight_name not in name:
@@ -393,8 +392,6 @@ class LlamaForCausalLM(nn.Module):
                 # Skip loading extra bias for GPTQ models.
                 if name not in params_dict:
                     continue
-                # if name.endswith(".bias") and name not in params_dict:
-                #     continue
                 param = params_dict[name]
                 weight_loader = getattr(param, "weight_loader",
                                         default_weight_loader)

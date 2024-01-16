@@ -57,26 +57,18 @@ def tensor_model_parallel_all_gather(input_, dim=-1):
 def send_to_next_pp_stage(tensor: torch.Tensor) -> None:
     return dist.send(tensor, get_pp_communicator_next_rank())
 
-Shape = Union[List[int], torch.Size]
+Shape = Union[List[int], torch.Size, torch.Tensor]
 def receive_from_prev_pp_stage(
     tensor_dtype: torch.dtype,
     tensor_shape: Optional[Shape] = None,
     tensor: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     if tensor is None:
+        if isinstance(tensor_shape, torch.Tensor):
+            tensor_shape = torch.Size(tensor_shape)
         tensor = torch.empty(tensor_shape, dtype=tensor_dtype, device='cuda')
     dist.recv(tensor, get_pp_communicator_prev_rank())
     return tensor
-
-# def receive_from_last_pp_rank(
-#     tensor_shape: Shape,
-#     tensor_dtype: torch.dtype,
-#     tensor: Optional[torch.Tensor] = None,
-# ) -> torch.Tensor:
-#     if tensor is None:
-#         tensor = torch.empty(tensor_shape, dtype=tensor_dtype, device='cuda')
-#     dist.recv(tensor, get_pipeline_model_parallel_last_rank())
-#     return tensor
 
 
 class pp_batch_send_or_recv:
@@ -86,7 +78,6 @@ class pp_batch_send_or_recv:
                  dtypes: torch.dtype | List[torch.dtype] = None,
                  is_shape: bool = False
                  ):
-        print(f"type: {type(tensors)}")
         if isinstance(ops, str):
             ops = [ops]
             if isinstance(tensors, torch.Tensor):
@@ -112,9 +103,11 @@ class pp_batch_send_or_recv:
         for i, op_tensor in enumerate(zip(ops, tensors)):
             op, tensor = op_tensor
             if op == "send":
-                handler = dist.P2POp(op=dist.isend, 
-                           tensor=tensor, 
-                           peer=get_pp_communicator_prev_rank())
+                handler = dist.P2POp(
+                    op=dist.isend, 
+                    tensor=tensor, 
+                    peer=get_pp_communicator_prev_rank()
+                )
                 handlers.append(handler)
 
             elif op == "recv":

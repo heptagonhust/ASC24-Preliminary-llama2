@@ -1,6 +1,8 @@
+import logging
 from typing import List, Tuple
 
 import torch
+import torch.multiprocessing as mp
 from transformers import AutoTokenizer
 
 from model.llama import LlamaForCausalLM
@@ -25,18 +27,19 @@ class Master():
         model_config: ModelConfig,
         parallel_config: ParallelConfig,
         scheduler_config: SchedulerConfig,
+        device: str = "cuda",
     ):
         self.model_config = model_config
         self.parallel_config = parallel_config
+        self.scheduler_config = scheduler_config
+        self.device = device
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_config.tokenizer, 
             trust_remote_code=self.model_config.trust_remote_code
         )
         self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.scheduler = SequenceScheduler(scheduer_config=scheduler_config,
-                                               rank=self.rank,
-                                               tokenizer=self.tokenizer,
-                                               device=self.device)
+
+        mp.set_start_method('spawn')
         self.sender = Sender(
             parallel_config=self.parallel_config
         )
@@ -50,18 +53,26 @@ class Master():
         self.recv_queue = self.receiver.start_loop()
         self.rank = initialize_calculator_distributed(self.model_config, self.parallel_config)
         self._init_model()
+        self.scheduler = SequenceScheduler(
+            scheduer_config=self.scheduler_config,
+            rank=self.rank,
+            tokenizer=self.tokenizer,
+            device=self.device
+        )
     
     def add_requests(self, requests: List[Tuple[str, int, int]]):
         self.scheduler.add_requests(requests)
-
+    
+    @torch.inference_mode()
     def run(self,
             sampling_params: SamplingParams):
+        logging.info("Master started")
         self.sampling_params = sampling_params
         hidden_state = None
         positions = None
         seqs_id = None
         while not self.scheduler.is_finished():
-            if self.recv_queue.empty():
+            if self.recv_queue.empty() and self.scheduler.more_batches():
                 hidden_state, positions, seqs_id = self.scheduler.get_new_batch()
             else:
                 recv_hidden_state, recv_positions, recv_seqs_id = self.recv_queue.get()
@@ -70,11 +81,12 @@ class Master():
                 del recv_hidden_state
                 del recv_positions
                 del recv_seqs_id
-            hidden_state = self.model(input_ = hidden_state,
-                                      positions = positions,
-                                      kv_caches = None,
-                                      input_metadata = None)
-            self.send_queue.put((hidden_state, positions, seqs_id))
+            if hidden_state is not None:
+                hidden_state = self.model(input_ = hidden_state,
+                                          positions = positions,
+                                          kv_caches = None,
+                                          input_metadata = None)
+                self.send_queue.put((hidden_state, positions, seqs_id))
                 
         #! end of work
         self.send_queue.put((None, None, None))
@@ -85,12 +97,12 @@ class Master():
                   hidden_state: torch.Tensor,
                   seqs_id: torch.Tensor):
         sampling_metadata = \
-            self.scheduler.get_sampling_metadata_from_seqs_id(seqs_id,
+            self.scheduler.get_sampling_metadata_from_seqs_id(seqs_id.tolist(),
                                                               self.sampling_params)
         sampler_output = self.model.sample(hidden_state, sampling_metadata)
         return self.scheduler.update_batch(seqs_id, sampler_output)
 
-        
+
     def _init_model(self):
         with set_default_torch_dtype(self.model_config.dtype):
             model = LlamaForCausalLM(self.model_config.hf_model_config)

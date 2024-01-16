@@ -2,7 +2,7 @@
 #SBATCH --job-name=baseline-tp-test
 #SBATCH -o outputs/baseline-tp-test-%j.log
 #SBATCH -e outputs/baseline-tp-test-%j.err
-#SBATCH --nodes=2
+#SBATCH --nodes=3
 #SBATCH --gres=gpu:2
 #SBATCH --mem 256G 
 

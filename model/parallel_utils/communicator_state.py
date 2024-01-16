@@ -1,6 +1,9 @@
 from typing import List
 import torch.distributed as dist
 
+_PP_COMMUNICATOR_GROUP = None
+_PP_COMMUNICATOR_GLOBAL_RANKS = None
+
 def initialize_communicator_state(
     tensor_model_parallel_size: int = 1,
     pipeline_model_parallel_size: int = 1,

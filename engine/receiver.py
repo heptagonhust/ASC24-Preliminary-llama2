@@ -1,5 +1,6 @@
 import os
 import torch
+import torch.distributed as dist
 import torch.multiprocessing as mp
 
 from model.model_metadata import ModelConfig, ParallelConfig
@@ -53,27 +54,24 @@ def _recv(
         backend=backend
     )
 
-    recv_stream = torch.cuda.Stream(device="cuda")
+    recv_stream = torch.cuda.Stream()
     recv_shape = torch.zeros([3], dtype=torch.long, device='cuda')
     while True:
         with torch.cuda.stream(recv_stream):
             receive_from_prev_pp_stage(tensor=recv_shape, tensor_dtype=torch.long)
-            if torch.equal(recv_shape, torch.tensor([-1, -1, -1])):
+            print(f"rank: {dist.get_rank()}, receive start", flush=True)
+            if torch.equal(recv_shape, torch.tensor([-1, -1, -1], device='cuda')):
                 #! end of work, waiting to be killed
                 hidden_state = None
                 positions = None
                 seqs_id = None
             else:
-                hidden_state, positions, seqs_id = \
-                    pp_batch_send_or_recv(
-                        ops=["recv", "recv", "recv"],
-                        tensors=[recv_shape, 
-                                 recv_shape,
-                                 recv_shape[0]],
-                        dtypes=[model_config.dtype, 
-                                torch.long, 
-                                torch.long],
-                        is_shape=True
-                    ).wait()
+                hidden_state = receive_from_prev_pp_stage(tensor_shape=recv_shape, 
+                                           tensor_dtype=model_config.dtype)
+                positions = receive_from_prev_pp_stage(tensor_shape=recv_shape[:2], 
+                                           tensor_dtype=torch.long)
+                seqs_id = receive_from_prev_pp_stage(tensor_shape=recv_shape[:1],
+                                           tensor_dtype=torch.long)
+            print(f"rank: {dist.get_rank()}, receive end", flush=True)
         torch.cuda.current_stream().wait_stream(recv_stream)
         recv_queue.put((hidden_state, positions, seqs_id))

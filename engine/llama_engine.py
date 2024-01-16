@@ -28,19 +28,20 @@ class LLamaEngine():
             self.worker = Master(
                 model_config=self.model_config,
                 parallel_config=self.parallel_config,
-                scheduler_config=self.scheduler_config
+                scheduler_config=self.scheduler_config,
+                device=self.device,
             )
             self.worker.start_master()
 
         else:
             self.worker = Worker(
-                model=self.model,
                 model_config=self.model_config,
-                parallel_config=self.parallel_config
+                parallel_config=self.parallel_config,
+                device=self.device,
             )
             self.worker.start_worker()
     
-    def generate(self, 
+    def generate(self,
                  requests: List[Tuple[str, int, int]], 
                  sampling_params: SamplingParams = None):
         if (int(os.environ["RANK"]) // self.parallel_config.tensor_parallel_size == 0):

@@ -1,5 +1,7 @@
+import logging
 import torch
 import torch.distributed as dist
+import torch.multiprocessing as mp
 
 from engine.sender import Sender
 from engine.receiver import Receiver
@@ -15,11 +17,16 @@ from utils.distributed_utils import (
 
 
 class Worker():
-    def __init__(self,
-                 model_config: ModelConfig,
-                 parallel_config: ParallelConfig):
+    def __init__(
+        self,
+        model_config: ModelConfig,
+        parallel_config: ParallelConfig,
+        device: str = "cuda",
+    ):
         self.model_config = model_config
         self.parallel_config = parallel_config
+        self.device = device
+        mp.set_start_method('spawn')
         self.sender = Sender(
             parallel_config=self.parallel_config
         )
@@ -34,7 +41,9 @@ class Worker():
         self.rank = initialize_calculator_distributed(self.model_config, self.parallel_config)
         self._init_model()
     
+    @torch.inference_mode()
     def run(self):
+        logging.info("Worker started")
         while True:
             recv_hidden_state, recv_positions, recv_seqs_id = self.recv_queue.get()
             if recv_hidden_state is None:
