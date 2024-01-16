@@ -2,7 +2,7 @@
 #SBATCH --job-name=baseline-tp-test
 #SBATCH -o outputs/baseline-tp-test-%j.log
 #SBATCH -e outputs/baseline-tp-test-%j.err
-#SBATCH --nodes=1
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=2
 #SBATCH --gres=gpu:2
 #SBATCH --mem 256G 
@@ -20,7 +20,7 @@ IP_ADDRESSES=""
 
 # get ip addresses of nodes
 for NODE in $NODELIST; do
-    IP=$(srun --nodes=1 --ntasks=1 -w $NODE hostname -i | awk '{print $2}')
+    IP=$(srun --nodes=2 --ntasks=2 -w $NODE hostname -i | awk '{print $2}')
     IP_ADDRESSES="${IP},${IP_ADDRESSES}"
 done
 

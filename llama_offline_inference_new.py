@@ -25,7 +25,7 @@ if __name__ == "__main__":
 
 
     model_config_llama = ModelConfig("/data_local/13B-hf", "/data_local/13B-hf", True, 1, None)
-    parallel_config_llama = ParallelConfig(pipeline_parallel_size = 1, tensor_parallel_size = 2)
+    parallel_config_llama = ParallelConfig(pipeline_parallel_size = 1, tensor_parallel_size = 4)
     port_config = PortConfig(router_port=55555, req_server_port=55556, rpc_base_port=rpc_base_port)
     sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
     req_config = ReqConfig(batch_size=10000,
