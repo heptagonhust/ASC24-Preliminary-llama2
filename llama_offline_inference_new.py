@@ -22,17 +22,17 @@ if __name__ == "__main__":
     hosts = hosts.split(",")
     hosts = hosts[:-1]
     rpc_base_port = args.base_port
+    logger.info(f"hosts: {hosts},rpc_base_port:{rpc_base_port}")
 
-
-    model_config_llama = ModelConfig("/data_local/13B-hf", "/data_local/13B-hf", True, 1, None)
+    model_config_llama = ModelConfig("/data_local/70B-hf", "/data_local/70B-hf", True, 1, None)
     parallel_config_llama = ParallelConfig(pipeline_parallel_size = 1, tensor_parallel_size = 4)
     port_config = PortConfig(router_port=55555, req_server_port=55556, rpc_base_port=rpc_base_port)
     sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
-    req_config = ReqConfig(batch_size=10000,
-                           max_total_token_num=20000,
+    req_config = ReqConfig(batch_size=25000,
+                           max_total_token_num=50000,
                            max_req_num=10000,
                            max_req_total_len=2048+512,
-                           router_token_ratio=0.5,
+                           router_token_ratio=0.7,
                            router_max_new_token_len=2048)
 
 
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     LLama = RequestEngine(model_config_llama, parallel_config_llama, port_config, sampling_params, req_config)
     with open('./scrambled_sampled_dataset.json') as f:
         requests = json.load(f)
-    requests = requests[:500]
+    # requests = requests[:500]
 
     LLama.generate(requests, sampling_params=sampling_params)
 

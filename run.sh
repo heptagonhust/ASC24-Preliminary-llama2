@@ -1,5 +1,6 @@
 #!/bin/bash
 
+echo 'run.sh'
 torchrun --nnodes $SLURM_NNODES \
         --nproc_per_node $GPU_PER_NODE \
         --master_addr $MASTER_ADDR \

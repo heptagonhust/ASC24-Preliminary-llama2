@@ -93,6 +93,7 @@ class RouterManager:
 
         # 现在正在跑的所有节点
         self.hosts = hosts
+        logger.info(f"RouterManager __init__ hosts:{self.hosts}")
 
         return
 
@@ -103,6 +104,7 @@ class RouterManager:
         self.model_rpcs: List[ModelRpcClient] = []
         for host in self.hosts:
             for port in [self.port_config.rpc_base_port + i for i in range(2)]:  # 我他妈直接写死
+                logger.info(f"wait_to_model_ready host:{host},port:{port}")
                 rpc_model = await connect_to_model_rpc_client(host, port, world_size=self.parallel_config_llama.world_size)
                 self.model_rpcs.append(rpc_model)
         
@@ -462,6 +464,7 @@ def start_router_process(
         router_port: router的端口
         req_server_port: req_server的端口
     '''
+    logger.info(f"start_router_process hosts:{hosts}")
     try:
         router = RouterManager(
             model_dir,
@@ -496,14 +499,15 @@ def start_router_process(
 
 
 async def connect_to_model_rpc_client(host, port, world_size):
+    logger.info(f"connect_to_model_rpc_client host:{host},port:{port},worldsize:{world_size}")
     repeat_count = 0
-    while repeat_count < 20:
+    while repeat_count < 20000:
         try:
             con = rpyc.connect(host, port, config={"allow_pickle": True})
             break
         except BaseException:
             await asyncio.sleep(1)
         repeat_count += 1
-    if repeat_count == 20:
+    if repeat_count == 20000:
         raise Exception("init rpc env error!")
     return ModelRpcClient(con.root, world_size)
