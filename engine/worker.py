@@ -44,6 +44,7 @@ class Worker():
     @torch.inference_mode()
     def run(self):
         logging.info("Worker started")
+        idx = 0
         while True:
             recv_hidden_state, recv_positions, recv_seqs_id = self.recv_queue.get()
             if recv_hidden_state is None:
@@ -57,6 +58,8 @@ class Worker():
             del recv_hidden_state
             del recv_positions
             del recv_seqs_id
+            print(f"idx: {idx}, rank: {self.rank}, seqs_id: {seqs_id}")
+            idx += 1
             self.send_queue.put((hidden_state, positions, seqs_id))
                 
         #! end of work

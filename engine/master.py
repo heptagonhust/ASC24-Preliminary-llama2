@@ -71,6 +71,7 @@ class Master():
         hidden_state = None
         positions = None
         seqs_id = None
+        idx = 0
         while not self.scheduler.is_finished():
             if self.scheduler.more_batches():
                 hidden_state, positions, seqs_id = self.scheduler.get_new_batch()
@@ -86,6 +87,8 @@ class Master():
                                           positions = positions,
                                           kv_caches = None,
                                           input_metadata = None)
+                print(f"idx: {idx}, rank: {self.rank}, seqs_id: {seqs_id}")
+                idx += 1
                 self.send_queue.put((hidden_state, positions, seqs_id))
                 
         #! end of work
