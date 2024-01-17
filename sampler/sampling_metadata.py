@@ -279,3 +279,52 @@ def _prepare_sample(
         categorized_sample_indices=categorized_sample_indices,
     )
     return sampling_metadata
+
+def prepare_sample(
+    seqs_id: List[int],
+    seqs_data: List[SequenceData],
+    sampling_params: SamplingParams,
+) -> SamplingMetadata:
+        #! store sampling param of all seq_groups in seq_group_metadata_list
+        seq_groups: List[Tuple[List[int], SamplingParams]] = [
+            ([seq_id], sampling_params) for seq_id in seqs_id
+        ]
+        seq_data_dict: Dict[int, SequenceData] = {
+            seq_id: seq_data for seq_id, seq_data in zip(seqs_id, seqs_data)
+        }
+        prompt_lens: List[int] = [
+            seq_data.get_prompt_len() for seq_data in seqs_data
+        ]
+        
+        #! categorized_sample_indices: Dict[SamplingType, List[int]]
+        categorized_sample_indices = {t: [] for t in SamplingType}
+        categorized_sample_indices[sampling_params.sampling_type].extend(
+            range(len(seqs_data))
+        )
+        categorized_sample_indices = {
+            t: _async_h2d(seq_ids, dtype=torch.int, pin_memory=True)
+            for t, seq_ids in categorized_sample_indices.items()
+        }
+
+        seqs_len: List[int] = [seq_data.get_len() for seq_data in seqs_data]
+        max_seqs_len = max(seqs_len)
+        selected_token_indices: List[int] = []
+        selected_token_start_idx = 0
+        for seq_data in seqs_data:
+            selected_token_indices.append(
+                selected_token_start_idx + seq_data.get_len() - 1
+            )
+            selected_token_start_idx += max_seqs_len
+
+        selected_token_indices = _async_h2d(selected_token_indices,
+                                            dtype=torch.long,
+                                            pin_memory=True)
+
+        sampling_metadata = SamplingMetadata(
+            seq_groups=seq_groups,
+            seq_data=seq_data_dict,
+            prompt_lens=prompt_lens,
+            selected_token_indices=selected_token_indices,
+            categorized_sample_indices=categorized_sample_indices,
+        )
+        return sampling_metadata

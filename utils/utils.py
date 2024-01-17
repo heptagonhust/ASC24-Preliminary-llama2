@@ -2,9 +2,12 @@
 # Adapted from
 # https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/tensor_parallel/utils.py
 # Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+import random
+import contextlib
 from typing import Sequence, Any, Dict, Optional
 
 import torch
+import numpy as np
 
 
 def ensure_divisibility(numerator, denominator):
@@ -66,3 +69,17 @@ def set_weight_attrs(
         assert not hasattr(
             weight, key), (f"Overwriting existing tensor attribute: {key}")
         setattr(weight, key, value)
+
+@contextlib.contextmanager
+def set_default_torch_dtype(dtype: torch.dtype):
+    """Sets the default torch dtype to the given dtype."""
+    old_dtype = torch.get_default_dtype()
+    torch.set_default_dtype(dtype)
+    yield
+    torch.set_default_dtype(old_dtype)
+
+def set_random_seed(seed: int):
+    random.seed(seed)
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    torch.cuda.manual_seed_all(seed)
