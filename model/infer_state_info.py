@@ -3,10 +3,12 @@ import numpy as np
 
 from manager.memory_manager import MemoryManager
 from manager.request_manager import RequestManager
+from manager.tiny_batch_manager_metadata import TinyBatchManagerOp
 
 class InferStateInfo:
     """
     推理时用的信息结构体
+    注意：pp通信时不应该直接传递这个类，而应该传递InferStateInfoForTransmission
     """
 
     def __init__(self):
@@ -59,3 +61,32 @@ class LlamaInferStateInfo(InferStateInfo):
             position_ids = None
             # b_loc[0, max_len_in_batch - 1].item()
         return
+
+
+class InferStateInfoForTransfer:
+    """
+    pp通信的元数据
+    """
+
+    def __init__(self):
+        self.batch_size = None
+        self.total_token_num = None
+        self.b_req_idx = None
+        self.b_start_loc = None
+        self.b_seq_len = None
+        self.max_len_in_batch = None
+        self.is_prefill = None
+        
+        self.mem_is_contiguous = None
+        self.mem_index = None
+        self.mem_start = None 
+        self.mem_end = None
+
+        self.is_splitfuse = False
+        self.return_all_prompt_logprobs = False
+        self.multimodal_params = None
+
+        '''
+        members for ReqManager operations in a batch
+        '''
+        self.infer_state_op: TinyBatchManagerOp = None
