@@ -24,7 +24,9 @@
 # limitations under the License.
 """Inference-only LLaMA model compatible with HuggingFace weights."""
 from typing import Any, Dict, List, Optional, Tuple
-
+import os
+import json
+import einops
 import re
 import torch
 import torch.distributed as dist
@@ -55,6 +57,22 @@ from model.parallel_utils.parallel_state import (
 from sampler.sampling_metadata import SamplingMetadata
 from model.weight_utils import (default_weight_loader,hf_model_weights_iterator)
 from sequence.sequence import SamplerOutput
+from model.parallel_utils.parallel_state import (
+    get_tensor_model_parallel_world_size)
+from sampler.sampling_metadata import SamplingMetadata
+from model.weight_utils import (default_weight_loader, hf_model_weights_iterator)
+from sequence.sequence import SamplerOutput
+from model.infer_state_info import InferStateInfo, LlamaInferStateInfo
+from model.layers.layer_infer_lightllm.transformer_layer_infer import LlamaTransformerLayerInfer
+from model.layers.triton_kernel import destindex_copy_kv
+from model.parallel_utils.parallel_state import get_tensor_model_parallel_rank
+from utils.utils import repair_config,init_req_to_token_indexes
+from manager.memory_manager import MemoryManager
+from manager.request_manager import RequestManager
+from model.layers.triton_kernel.copy_kv_index_to_req import copy_kv_index_to_req
+from model.layers.triton_kernel.rmsnorm import rmsnorm_forward
+
+
 
 KVCache = Tuple[torch.Tensor, torch.Tensor]
 
@@ -94,6 +112,7 @@ class LlamaAttention(nn.Module):
 
     def __init__(
         self,
+        layer_num: int,
         hidden_size: int,
         num_heads: int,
         num_kv_heads: int,
@@ -103,6 +122,7 @@ class LlamaAttention(nn.Module):
         linear_method: Optional[LinearMethodBase] = None,
     ) -> None:
         super().__init__()
+        self.layer_num = layer_num
         self.hidden_size = hidden_size
         tp_size = get_tensor_model_parallel_world_size()
         self.total_num_heads = num_heads
@@ -151,26 +171,25 @@ class LlamaAttention(nn.Module):
             base=rope_theta,
         )
 
-        self.attn = GroupAttention(self.num_heads,
-                                   self.head_dim,
-                                   self.scaling,
-                                   max_position_embeddings = max_position_embeddings,
-                                   num_kv_heads=self.num_kv_heads)
-
+        self.attn = LlamaTransformerLayerInfer(
+            self.layer_num,
+            self.num_heads,
+            self.num_kv_heads,
+            self.head_dim
+        )
+        
     def forward(
         self,
         positions: torch.Tensor,
         hidden_states: torch.Tensor,
-        kv_cache: KVCache,
-        input_metadata: InputMetadata,
+        infer_state: LlamaInferStateInfo,
     ) -> torch.Tensor:
         """Attention Layer forward pass.
 
         Args:
             positions: shape = [batch_size, seq_len]
             hidden_states: shape = [batch_size, seq_len, hidden_size]
-            kv_cache (KVCache): Tuple[k_cache, v_cache]
-            input_metadata (InputMetadata): 
+            infer_state: LlamaInferStateInfo 
 
         Returns:
             torch.Tensor: _description_
@@ -181,29 +200,30 @@ class LlamaAttention(nn.Module):
         #! k,v: [batch_size, seq_len, tp_kv_size]
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         #! rotary embedding encoding for key & value
-        q, k = self.rotary_emb(positions, q, k)
-        # k_cache, v_cache = kv_cache
-        k_cache = None
-        v_cache = None
-        attn_output = self.attn(q, k, v, k_cache, v_cache, input_metadata)
-        output = self.o_proj(attn_output)
-        return output
+        # q, k = self.rotary_emb(positions, q, k)
+        attn_output = self.attn.forward(q, k, v, infer_state)
 
+        output = self.o_proj(attn_output)
+
+        return output
 
 class LlamaDecoderLayer(nn.Module):
 
     def __init__(
         self,
         config: LlamaConfig,
+        layer_num: int,
         linear_method: Optional[LinearMethodBase] = None,
     ) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
+        self.layer_num = layer_num
         rope_theta = getattr(config, "rope_theta", 10000)
         rope_scaling = getattr(config, "rope_scaling", None)
         max_position_embeddings = getattr(config, "max_position_embeddings",
                                           8192)
         self.self_attn = LlamaAttention(
+            layer_num=layer_num,
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
             num_kv_heads=config.num_key_value_heads,
@@ -230,27 +250,31 @@ class LlamaDecoderLayer(nn.Module):
         kv_cache: KVCache,
         input_metadata: InputMetadata,
         residual: Optional[torch.Tensor],
+        infer_state: LlamaInferStateInfo,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Self Attention
+        
         if residual is None:
             residual = hidden_states
             hidden_states = self.input_layernorm(hidden_states)
         else:
             hidden_states, residual = self.input_layernorm(
                 hidden_states, residual)
+            
+
         hidden_states = self.self_attn(
             positions=positions,
             hidden_states=hidden_states,
-            kv_cache=kv_cache,
-            input_metadata=input_metadata,
+            infer_state=infer_state
         )
 
         # Fully Connected
         hidden_states, residual = self.post_attention_layernorm(
             hidden_states, residual)
+        
         hidden_states = self.mlp(hidden_states)
+ 
         return hidden_states, residual
-
 
 class LlamaModel(nn.Module):
 
@@ -268,8 +292,8 @@ class LlamaModel(nn.Module):
         self.pp_rank = get_pipeline_model_parallel_rank()
         self.num_layers = get_pipeline_model_parallel_layer_num(config.num_hidden_layers)
         self.layers = nn.ModuleList([
-            LlamaDecoderLayer(config, linear_method)
-            for _ in range(self.num_layers)
+            LlamaDecoderLayer(config, i, linear_method)
+            for i in range(config.num_hidden_layers)
         ])
 
         if self.pp_rank == 0:
@@ -284,9 +308,10 @@ class LlamaModel(nn.Module):
         self,
         input_: torch.Tensor,
         positions: torch.Tensor,
-        kv_caches: List[KVCache],
+        infer_state: LlamaInferStateInfo,
         input_metadata: InputMetadata,
     ) -> torch.Tensor:
+        
         hidden_states = self.embed_tokens(input_) if self.pp_rank == 0 else input_
         residual = None
         for i in range(len(self.layers)):
@@ -297,11 +322,12 @@ class LlamaModel(nn.Module):
                 None,
                 input_metadata,
                 residual,
+                infer_state,
             )
         if self.pp_rank == self.pp_size - 1:
             hidden_states, _ = self.norm(hidden_states, residual)
         else:
-            hidden_states += residual
+            hidden_states.add_(residual)
         return hidden_states
 
 
@@ -310,39 +336,303 @@ class LlamaForCausalLM(nn.Module):
     def __init__(
         self,
         config: LlamaConfig,
-        linear_method: Optional[LinearMethodBase] = None,
+        **kwargs
     ) -> None:
         super().__init__()
         self.config = config
-        self.linear_method = linear_method
-        self.model = LlamaModel(config, linear_method)
+        self.linear_method = None
+        self.model = LlamaModel(config, self.linear_method)
         self.dtype  = torch.get_default_dtype()
         self.pp_size = get_pipeline_model_parallel_world_size()
         self.pp_rank = get_pipeline_model_parallel_rank()
+        self.tp_size = get_tensor_model_parallel_world_size()
+
+        self.weight_dir = kwargs.get("weight_dir")
+        self.max_total_token_num = kwargs.get("max_total_token_num")
+        self.max_req_num = kwargs.get("max_req_num", 1000)
+        self.max_seq_length = kwargs.get("max_seq_length", 1024 * 5)
+        self.return_all_prompt_logprobs = kwargs.get("return_all_prompt_logprobs", False)
+        
+        self._init_config() # TODO:确定是否必须要在0号节点初始化
+        self._verify_must()
+        self._verify_params()
+        self._init_some_value()
+        self._init_to_get_rotary()
+
         if self.pp_rank == 0:
             self.lm_head = ParallelLMHead(config.vocab_size, config.hidden_size)
             self.sampler = Sampler(config.vocab_size)
+            self._init_mem_manager()
+            self._init_req_manager()
+
+    def _init_config(self):
+        with open(os.path.join(self.weight_dir, "config.json"), 'r') as json_file:
+            self.config = json.load(json_file)
+        # rename keys
+        repair_config(self.config, same_names=["num_attention_heads", "n_head"])
+        repair_config(self.config, same_names=["hidden_size", "n_embd", "n_embed"])
+        repair_config(self.config, same_names=["num_hidden_layers", "n_layer"])
+        if "num_key_value_heads" not in self.config:
+            self.config["num_key_value_heads"] = self.config["num_attention_heads"]
+        return
+
+    def _verify_must(self):
+        assert self.config["num_attention_heads"] % self.tp_size == 0
+        return
+    
+    def _verify_params(self):
+        assert self.config["num_key_value_heads"] % self.tp_size == 0
+        return
+
+    def _init_mem_manager(self):
+        self.mem_manager = MemoryManager(self.max_total_token_num,dtype=torch.float16,
+                                         head_num=self.config["num_key_value_heads"] // self.tp_size,
+                                         head_dim=self.config["hidden_size"] // self.config["num_attention_heads"],
+                                         layer_num=self.config["num_hidden_layers"])
+        return
+    
+    def _init_req_manager(self):
+        self.req_manager = RequestManager(self.max_req_num,
+                                          self.max_seq_length,
+                                          self.mem_manager)
+        return
+
+    def _init_some_value(self):
+        self.head_dim_ = self.config["n_embed"] // self.config["num_attention_heads"]
+        self.tp_k_head_num_ = self.config["num_key_value_heads"] // self.tp_size
+        self.tp_v_head_num_ = self.tp_k_head_num_
+        self.layers_num = self.config["n_layer"]
+        self.vocab_size = self.config["vocab_size"]
+        return
+
+    def _init_to_get_rotary(self, default_base=10000):
+        if self.config.get("rope_scaling", {}) is None:
+            rope_scaling_factor = 1.0
+        else:
+            rope_scaling_factor = self.config.get("rope_scaling", {}).get("factor", 1.0)
+
+        base = self.config.get("rope_theta", float(default_base))
+
+        if "max_sequence_length" in self.config:
+            max_seq_len = self.config["max_sequence_length"]        
+        else:
+            max_position_embeddings = self.config.get(
+                "max_position_embeddings",
+                2048 if base <= 10000.0 + 1e-5 else 16384
+            )
+            max_seq_len = max_position_embeddings * rope_scaling_factor
+        
+        inv_freq = 1.0 / (base ** (torch.arange(0, self.head_dim_, 2, device="cpu", dtype=torch.float32) / self.head_dim_))
+        t = torch.arange(max_seq_len + 1024 * 64, device="cpu", dtype=torch.float32) / rope_scaling_factor
+        freqs = torch.outer(t, inv_freq)
+
+        self._cos_cached = torch.cos(freqs).to(torch.float16).cuda()
+        self._sin_cached = torch.sin(freqs).to(torch.float16).cuda()
+        return
+
+    def _prefill(self, batch_size, total_token_num,
+                 max_len_in_batch, input_ids,
+                 b_req_idx, b_start_loc, b_seq_len,
+                 multimodal_params, positions, input_metadata,infer_state):
+        
+        if self.pp_rank == 0:
+            infer_state = LlamaInferStateInfo()
+            infer_state.is_prefill = True
+            infer_state.return_all_prompt_logprobs = self.return_all_prompt_logprobs
+            infer_state.batch_size = batch_size
+            infer_state.total_token_num = total_token_num
+            infer_state.max_len_in_batch = max_len_in_batch
+            # assert (input_ids.shape[0] == total_token_num)
+            assert (b_req_idx.shape[0] == b_start_loc.shape[0] == b_seq_len.shape[0])
+            infer_state.b_req_idx = b_req_idx
+            infer_state.b_start_loc = b_start_loc
+            infer_state.b_seq_len = b_seq_len
+            infer_state.multimodal_params = multimodal_params
+
+            infer_state.mem_manager = self.mem_manager
+            infer_state.req_manager = self.req_manager
+            
+
+            alloc_mem = self.mem_manager.alloc_contiguous(infer_state.total_token_num)
+            if alloc_mem is not None:
+                infer_state.mem_is_contiguous = True
+                infer_state.mem_index = alloc_mem[0]
+                infer_state.mem_start = alloc_mem[1]
+                infer_state.mem_end = alloc_mem[2]
+
+            else:
+                infer_state.mem_is_contiguous = False
+                alloc_mem = self.mem_manager.alloc(infer_state.total_token_num)
+                infer_state.mem_index = alloc_mem
+                infer_state.key_buffer = torch.empty((infer_state.total_token_num, self.tp_k_head_num_, self.head_dim_), dtype=torch.float16, device="cuda")
+                infer_state.value_buffer = torch.empty((infer_state.total_token_num, self.tp_v_head_num_, self.head_dim_), dtype=torch.float16, device="cuda")
+            
+            init_req_to_token_indexes(self.req_manager.req_to_token_indexs, b_req_idx, b_seq_len,
+                                max_len_in_batch, infer_state.mem_index)
+
+            infer_state.init_some_extra_state(self, input_ids)
+        
+        hidden_states = self.model(input_ids,positions,infer_state,input_metadata)
+        
+        # TODO: 只在采样节点上做这一层？
+        # hidden_states = self.postlayer_get_embedding(hidden_states, infer_state, return_logits=True)
+
+        return hidden_states,infer_state
+
+    def _decode(self, batch_size, total_token_num, max_len_in_batch, input_ids, b_req_idx, b_start_loc, b_seq_len, multimodal_params,positions,input_metadata,infer_state):
+        if self.pp_rank == 0:
+            infer_state = LlamaInferStateInfo()
+            infer_state.is_prefill = False
+            infer_state.batch_size = batch_size
+            infer_state.total_token_num = total_token_num
+            infer_state.max_len_in_batch = max_len_in_batch
+            assert (b_req_idx.shape[0] == b_start_loc.shape[0] == b_seq_len.shape[0])
+            infer_state.b_req_idx = b_req_idx
+            infer_state.b_start_loc = b_start_loc
+            infer_state.b_seq_len = b_seq_len
+            infer_state.multimodal_params = multimodal_params
+            
+            infer_state.mem_manager = self.mem_manager
+            infer_state.req_manager = self.req_manager
+
+            alloc_mem = self.mem_manager.alloc_contiguous(batch_size)
+            if alloc_mem is not None:
+                infer_state.mem_is_contiguous = True
+                infer_state.mem_index = alloc_mem[0]
+                infer_state.mem_start = alloc_mem[1]
+                infer_state.mem_end = alloc_mem[2]
+                copy_kv_index_to_req(self.req_manager.req_to_token_indexs, b_req_idx, b_seq_len, infer_state.mem_index)
+            else:
+                infer_state.mem_is_contiguous = False
+                alloc_mem = self.mem_manager.alloc(batch_size)
+                infer_state.mem_index = alloc_mem
+                infer_state.key_buffer = torch.empty((batch_size, self.tp_k_head_num_, self.head_dim_), dtype=torch.float16, device="cuda")
+                infer_state.value_buffer = torch.empty((batch_size, self.tp_v_head_num_, self.head_dim_), dtype=torch.float16, device="cuda")
+                copy_kv_index_to_req(self.req_manager.req_to_token_indexs, b_req_idx, b_seq_len, infer_state.mem_index)
+
+            infer_state.init_some_extra_state(self, input_ids)
+        # hidden_state = self._token_forward(input_ids, infer_state)
+        hidden_states = self.model(input_ids, positions, infer_state, input_metadata)
+        
+        # TODO: 只在采样节点上做这一层？
+        # hidden_states = self.postlayer_get_embedding(hidden_states, infer_state, return_logits=True)
+        
+        return hidden_states,infer_state
 
     def forward(
         self,
-        input_: torch.Tensor,
+        batch_size,
+        total_token_num,
+        max_len_in_batch,
+        input_ids: torch.Tensor,
         positions: torch.Tensor,
-        kv_caches: List[KVCache] = None,
-        input_metadata: InputMetadata = None,
-    ) -> torch.Tensor:
-        hidden_states = self.model(input_, positions, kv_caches,
-                                   input_metadata)
-        return hidden_states
+        b_req_idx: torch.Tensor,
+        b_start_loc: torch.Tensor,
+        b_seq_len: torch.Tensor,
+        is_prefill: bool,
+        # kv_caches: List[KVCache],
+        input_metadata: InputMetadata,
+        infer_state: LlamaInferStateInfo
+    ):
+        if is_prefill:
+            return self._prefill(
+                batch_size=batch_size,
+                total_token_num=total_token_num,
+                max_len_in_batch=max_len_in_batch,
+                input_ids=input_ids,
+                b_req_idx=b_req_idx,
+                b_start_loc=b_start_loc,
+                b_seq_len=b_seq_len,
+                multimodal_params=None,
+                positions=positions,
+                input_metadata=input_metadata,
+                infer_state=infer_state
+            )
+        else:
+            return self._decode(
+                batch_size=batch_size,
+                total_token_num=total_token_num,
+                max_len_in_batch=max_len_in_batch,
+                input_ids=input_ids,
+                b_req_idx=b_req_idx,
+                b_start_loc=b_start_loc,
+                b_seq_len=b_seq_len,
+                multimodal_params=None,
+                positions=positions,
+                input_metadata=input_metadata,
+                infer_state=infer_state
+            )   
 
-    def sample(
+    # def forward(
+    #     self,
+    #     input_: torch.Tensor,
+    #     positions: torch.Tensor,
+    #     kv_caches: List[KVCache] = None,
+    #     input_metadata: InputMetadata = None,
+    # ) -> torch.Tensor:
+    #     hidden_states = self.model(input_, positions, kv_caches,
+    #                                input_metadata)
+    #     return hidden_states
+
+    def _slice_get_last_input(self, input_embdings: torch.Tensor, infer_state: LlamaInferStateInfo):
+        if infer_state.is_prefill and not infer_state.return_all_prompt_logprobs:
+            batch_size = infer_state.batch_size
+            last_input = torch.empty((batch_size, input_embdings.shape[-1]),
+                                     device=input_embdings.device,
+                                     dtype=torch.float16)
+            last_index = torch.cumsum(infer_state.b_seq_len, dim=0, dtype=torch.long) - 1
+            if len(input_embdings.shape) == 3:
+                last_input[:, :] = input_embdings[0, last_index, :]
+            else:
+                last_input[:, :] = input_embdings[last_index, :]
+            return last_input, batch_size
+
+        if infer_state.is_prefill and infer_state.return_all_prompt_logprobs:
+            total_tokens = infer_state.total_token_num
+            return input_embdings, total_tokens
+        
+        if not infer_state.is_prefill:
+            batch_size = infer_state.batch_size
+            if len(input_embdings.shape) == 3:
+                return input_embdings[0, -batch_size:, :], batch_size
+            else:
+                return input_embdings[-batch_size:, :], batch_size
+        
+        assert False, "Error State"
+
+    def postlayer_get_embedding(
         self,
-        hidden_states: torch.Tensor,
-        sampling_metadata: SamplingMetadata,
-    ) -> SamplerOutput:
-        next_tokens = self.sampler(self.lm_head.weight, 
-                                   hidden_states,
-                                   sampling_metadata)
-        return next_tokens
+        input_embedding: torch.Tensor,
+        infer_state: LlamaInferStateInfo,
+        return_logits: bool
+    ) -> torch.Tensor:
+        last_input, token_num = self._slice_get_last_input(input_embedding, infer_state)
+        input_embedding = None
+        last_input = einops.rearrange(last_input, "batch embed_dim -> embed_dim batch").contiguous().reshape(-1, token_num)
+        logic_batch = torch.mm(self.lm_head.weight, last_input)
+
+        
+        gather_data = None
+        if self.tp_size == 1:
+            gather_data = logic_batch
+        else:
+            gather_data = torch.empty((self.vocab_size, token_num), device=logic_batch.device, dtype=torch.float16)
+            split_size = self.vocab_size // self.tp_size
+            dist.all_gather([gather_data[i * split_size: (i + 1) * split_size, :]
+                            for i in range(self.tp_size)], logic_batch, group=None, async_op=False)
+
+        logic_batch = None
+
+        print(f"gather_data: {gather_data.shape}, {gather_data}")
+
+        if not return_logits:
+            prob_out = torch.softmax(gather_data.permute(1, 0).float(), dim=-1)
+            gather_data = None
+            return prob_out
+        else:
+            ans_logits = gather_data.permute(1, 0).float()
+            gather_data = None
+            return ans_logits
 
     def load_weights(self,
                      model_name_or_path: str,
