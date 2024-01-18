@@ -1,5 +1,3 @@
-import uuid
-import asyncio
 import numpy as np
 from typing import List
 from router.io_struct import Batch, Req, ReqRunStatus
@@ -8,9 +6,22 @@ from typing import Dict, List, Optional, Tuple
 from utils.log_utils import init_logger
 logger = init_logger(__name__)
 
+def id_generator():
+    current_id = 0
+    while True:
+        yield current_id
+        current_id += 1
+
+# 创建生成器实例
+ids = id_generator()
+
+def gen_id():
+    return next(ids)
+
+
 class ReqQueue:
 
-    def __init__(self, args, prompt_cache_used_tokens, prompt_cache_req_num) -> None:
+    def __init__(self, args) -> None:
         self.max_total_tokens = args["max_total_token_num"]
         self.batch_max_tokens = args["batch_max_tokens"]
         self.running_max_req_size = args["running_max_req_size"]
@@ -21,10 +32,6 @@ class ReqQueue:
         self.pause_req_used_tokens = 0
 
         self.is_splitfuse_mode = False
-
-        # 当使用 prompt cache 特性时的维护变量
-        self.prompt_cache_used_tokens = prompt_cache_used_tokens
-        self.prompt_cache_req_num = prompt_cache_req_num
         
     def append(self, req):
         self.waiting_req_list.append(req)
@@ -61,8 +68,8 @@ class ReqQueue:
             self.cache_pause_reqs_used_tokens -= req.get_used_tokens()
             self.cache_pause_reqs_num -= 1
 
-        ok_token_num = need_max_token_num < self.max_total_tokens - self.cache_pause_reqs_used_tokens - self.prompt_cache_used_tokens
-        ok_req_num = len(self.cache_len_list) + self.cache_pause_reqs_num + self.prompt_cache_req_num <= self.running_max_req_size
+        ok_token_num = need_max_token_num < self.max_total_tokens - self.cache_pause_reqs_used_tokens
+        ok_req_num = len(self.cache_len_list) + self.cache_pause_reqs_num <= self.running_max_req_size
 
         if ok_token_num and ok_req_num:
             return True
@@ -73,8 +80,7 @@ class ReqQueue:
     def generate_new_batch(self, current_batch:Batch):
 
         # 如果当前已经被调度的请求数量超过了上限，直接不调度新的请求了。
-        exist_req_num = self.prompt_cache_req_num
-        exist_req_num += 0 if current_batch is None else len(current_batch.reqs)
+        exist_req_num = 0 if current_batch is None else len(current_batch.reqs)
         exist_req_num += len(self.pause_req_dict)
         req_is_full = exist_req_num >= self.running_max_req_size
         if req_is_full:
@@ -82,7 +88,7 @@ class ReqQueue:
         
         # 计算当前所有的token使用量，包括当前使用和暂停的
         cur_all_used_tokens = 0 if current_batch is None else current_batch.batch_used_tokens
-        cur_all_used_tokens += self.recalcu_pause_req_used_tokens() + self.prompt_cache_used_tokens
+        cur_all_used_tokens += self.recalcu_pause_req_used_tokens()
         
         # 判断当前服务是否处于token使用率过高的状态，过高的情况下，调度要偏向保守
         cur_token_ratio = cur_all_used_tokens / self.max_total_tokens
@@ -121,7 +127,7 @@ batch_max_tokens: {self.batch_max_tokens}""")
                 break
 
         if len(can_run_list) != 0:
-            new_batch = Batch(uuid.uuid4().hex, can_run_list)
+            new_batch = Batch(gen_id(), can_run_list)
             self.waiting_req_list = self.waiting_req_list[len(can_run_list) + aborted_count:]
             # 生成新 batch 以后，更新一下状态
             self.recalcu_pause_req_used_tokens()
