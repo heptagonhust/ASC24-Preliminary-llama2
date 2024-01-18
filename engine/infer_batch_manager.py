@@ -3,6 +3,8 @@ import torch
 import rpyc
 from typing import Dict, List, Optional, Tuple
 from transformers.models.llama import LlamaConfig
+from manager.tiny_batch_manager_metadata import TinyBatchManagerOpKind
+from router.io_struct import Req
 from router.model_infer.infer_batch import InferBatch
 
 from model.llama import LlamaForCausalLM
@@ -114,5 +116,16 @@ class InferBatchManager:
 
         self.cache[batch.batch_id] = batch
         return output_dict
+    
+    def put_for_prefill(batch_id: int, reqs: List[Req]):
+        pass
+        
+    def put_for_decode(batch_id: int, req_ids: List[int],
+                       finished_or_removed_req_ids: List[int],
+                       op_kind: TinyBatchManagerOpKind):
+        pass
+    
+    def put_for_pause(batch_id: int, req_ids: List[int]):
+        pass
 
 
