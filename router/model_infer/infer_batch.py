@@ -4,7 +4,7 @@ import numpy as np
 import collections
 
 from dataclasses import dataclass, field
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from manager.request_manager import RequestManager
 from manager.memory_manager import MemoryManager
 from router.io_struct import Req, ReqRunStatus
@@ -70,15 +70,23 @@ class InferReq:
 class InferBatch:
     batch_id: int
     request_ids: List
-    req_manager: RequestManager
     
     @classmethod
     @torch.no_grad()
-    def init_batch(cls, batch_id, requests: List[Req], dtype: torch.dtype, device: torch.device, req_manager:RequestManager, vocab_size: int):
+    def init_batch(cls, batch_id, requests: List[Req], vocab_size: int):
 
         request_ids = []
-        need_alloc_size = len([r for r in requests if r.request_id not in requests_mapping])
-        nopad_b_req_idx = req_manager.alloc(need_alloc_size)
+        
+        # need_alloc_size = len([r for r in requests if r.request_id not in requests_mapping])
+        # nopad_b_req_idx = req_manager.alloc(need_alloc_size)
+        # nopad_b_req_idx = nopad_b_req_idx.cpu().numpy()
+
+        #! I don't know whether it is right.
+        #! The problem is that you don't know whether "requests_mapping" is the same with 
+        #! RequestManager's "req_state" or not.
+        need_alloc_req_idxs = [r.request_id for r in requests if r.request_id not in requests_mapping]
+        need_alloc_size = len(need_alloc_req_idxs)
+        nopad_b_req_idx = need_alloc_req_idxs
         nopad_b_req_idx = nopad_b_req_idx.cpu().numpy()
         
         index = 0
@@ -131,63 +139,59 @@ class InferBatch:
         return cls(
             batch_id=batch_id,
             request_ids=request_ids,
-            req_manager=req_manager,
-        )
+        ), need_alloc_size
     
     @torch.no_grad()
     def free_self(self):
-        free_req_index = []
-        free_token_index = []
+        req_idx_list = []
+        cur_kv_len_list = []
         for request_id in self.request_ids:
             req : InferReq = requests_mapping.pop(request_id)
-            free_req_index.append(req.req_idx)
-            free_token_index.append(self.req_manager.req_to_token_indexs[req.req_idx][:req.cur_kv_len])
-            
-        free_token_index = torch.cat(free_token_index, dim=-1)
-        self.req_manager.free(free_req_index, free_token_index)
+            req_idx_list.append(req.req_idx)
+            cur_kv_len_list.append(req.cur_kv_len)
         if len(requests_mapping) == 0:
             requests_mapping.clear()
-        return
+        return req_idx_list, cur_kv_len_list
     
     @torch.no_grad()
-    def filter(self, request_ids: List[str], finished_request_ids: List[str]):
+    def filter(self, request_ids: List[int], finished_request_ids: List[int]):
         if len(requests_mapping) == 0:
             raise ValueError("Batch must have at least one request")
         if len(request_ids) == len(self):
             return self
         if len(request_ids) == 0:
-            self.free_self()
             return InferBatch(
                 batch_id=self.batch_id,
                 request_ids=[],
-                req_manager=self.req_manager
-            )
-        free_req_index = []
-        free_token_index = []
+            ), self.free_self()
+        
+        req_idx_list = []
+        cur_kv_len_list = []
+
         for request_id in finished_request_ids:
             req : InferReq = requests_mapping.pop(request_id)
-            free_req_index.append(req.req_idx)
-            free_token_index.append(self.req_manager.req_to_token_indexs[req.req_idx][:req.cur_kv_len])
-        free_token_index = torch.cat(free_token_index, dim=-1)
-        self.req_manager.free(free_req_index, free_token_index)
+            req_idx_list.append(req.req_idx)
+            cur_kv_len_list.append(req.cur_kv_len)
         
         return InferBatch(
             batch_id=self.batch_id,
             request_ids=request_ids,
-            req_manager=self.req_manager,
-        )
+        ), req_idx_list, cur_kv_len_list
 
     @torch.no_grad()
-    def pause_reqs(self, pause_reqs: List[str]):
+    def pause_reqs(self, pause_reqs: List[Tuple[int, ReqRunStatus]]):
+        req_idx_list = []
+        cur_kv_len_list = []
         for request_id, pause_way in pause_reqs:
             req : InferReq = requests_mapping[request_id]
             req.req_status = pause_way
             self.request_ids.remove(request_id)
             if pause_way == ReqRunStatus.PAUSED_AND_OFFLOAD:
                 # 现在只支持全卸载一个请求的所有 kv 了
-                self.req_manager.free_token(self.req_manager.req_to_token_indexs[req.req_idx][:req.cur_kv_len])
+                req_idx_list.append(req.req_idx)
+                cur_kv_len_list.append(req.cur_kv_len)
                 req.cur_kv_len = 0
-        return self
+        return self, req_idx_list, cur_kv_len_list
 
     @classmethod
     @torch.no_grad()
@@ -197,7 +201,6 @@ class InferBatch:
         return InferBatch(
             batch_id=batch1.batch_id,
             request_ids=request_ids,
-            req_manager=batch1.req_manager,
         )
 
     def __len__(self):
