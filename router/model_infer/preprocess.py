@@ -55,17 +55,16 @@ def prepare_prefill_inputs(batch: InferBatch):
         logger.info(f"nopad_b_seq_len: {nopad_b_seq_len}\nnopad_b_start_loc: {nopad_b_start_loc}\nnopad_b_req_idx: {nopad_b_req_idx}")
 
         kwargs = {
+            "input_ids": input_ids,
+
+            "batch_id": batch.batch_id,
             "batch_size": len(batch),
             "total_token_num": nopad_total_token_num,
             "max_len_in_batch": nopad_max_len_in_batch,
-            "input_ids": input_ids,
-            "positions": torch.from_numpy(np.concatenate([np.arange(0, b_seq_len_numpy[i])
-                                            for i in range(len(b_seq_len_numpy))], axis=0)).cuda(),
             "b_req_idx": nopad_b_req_idx,
             "b_start_loc": nopad_b_start_loc,
             "b_seq_len": nopad_b_seq_len,
             "is_prefill": True,
-            "input_metadata": None
         }
         return kwargs, run_reqs, not_run_reqs
     else:

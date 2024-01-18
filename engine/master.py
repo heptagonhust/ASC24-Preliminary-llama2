@@ -80,6 +80,8 @@ class Master():
             if self._more_batches():
                 token_ids, infer_state = self._get_batch()
             else:
+                #TODO: Here we should transfer recv_hidden_state and recv_infer_state
+                #      to scheduler directly. Also, sample should be done in scheduler, not here.
                 recv_hidden_state, recv_infer_state = self.recv_queue.get()
                 token_ids, infer_state = \
                     self._do_sample(recv_hidden_state, recv_infer_state)
@@ -88,6 +90,7 @@ class Master():
             if token_ids is not None:
                 self.tiny_batch_manager.perform_op(infer_state.infer_state_op)
                 if infer_state.infer_state_op.batch_op_kind != OpKind.PAUSE:
+                    # TODO: adjust model forward args
                     hidden_state = self.model(
                         input_ = token_ids,
                         infer_state = infer_state,

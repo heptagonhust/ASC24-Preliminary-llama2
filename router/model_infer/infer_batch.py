@@ -124,16 +124,6 @@ class InferBatch:
                     assert False, f"should not exist {requests_mapping[r_id].req_status}"
             
             request_ids.append(r_id)
-
-            # 如果是具有 prompt_cache 的使用特性则需要进行提前的填充和恢复操作。
-            if r_obj.req_status in [ReqRunStatus.RERUNNING_FROM_OFFLOAD, ReqRunStatus.WAIT_IN_QUEUE]:
-                if r_obj.prompt_cache_len != 0: # 有利用prompt_cache_len
-                    prompt_cache_req_obj : InferReq = requests_mapping[r_obj.prompt_cache_req_id]
-                    prompt_kv_tokens = req_manager.req_to_token_indexs[prompt_cache_req_obj.req_idx, 0:r_obj.prompt_cache_len]
-                    mem_manager : MemoryManager = req_manager.mem_manager
-                    mem_manager.add_refs(prompt_kv_tokens.long()) # 加 refs
-                    req_manager.req_to_token_indexs[r_obj.req_idx, 0:r_obj.prompt_cache_len] = prompt_kv_tokens
-                    r_obj.cur_kv_len = r_obj.prompt_cache_len
             
             # 初始化之后 所有请求状态置换为 RUNNING 状态
             r_obj.req_status = ReqRunStatus.RUNNING
