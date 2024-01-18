@@ -19,9 +19,9 @@ class Receiver():
         self,
         model_config: ModelConfig,
         parallel_config: ParallelConfig,
+        max_batch_size: int = 1024,
         calculator_rank: int = int(os.environ["RANK"]),
         calculator_world_size: int = int(os.environ["WORLD_SIZE"]),
-        max_req_num: int = 10000,
     ):
         self.recv_queue = mp.Queue()
         self.receiver = mp.Process(
@@ -32,7 +32,7 @@ class Receiver():
                 self.recv_queue, 
                 model_config,
                 parallel_config,
-                max_req_num,
+                max_batch_size,
             )
         )
     
@@ -46,7 +46,7 @@ def _recv(
     recv_queue: mp.Queue,
     model_config: ModelConfig,
     parallel_config: ParallelConfig,
-    max_req_num: int,
+    max_batch_size: int,
     backend: str = "nccl",
 ):
     initialize_communicator_distributed(
@@ -74,7 +74,7 @@ def _recv(
                 )
                 #! the shape of InferStateInfoForTransfer tensor is [11, max_req_num]
                 infer_state_tensor = receive_from_prev_pp_stage(
-                    tensor_shape=torch.tensor([11, max_req_num]),
+                    tensor_shape=torch.tensor([11, max_batch_size]),
                     tensor_dtype=torch.long
                 )
             print(f"rank: {dist.get_rank()}, receive end", flush=True)

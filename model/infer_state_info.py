@@ -106,20 +106,21 @@ class InferStateInfoForTransfer:
             torch.cat([infer_state_info_for_transfer_tensor, infer_state_op_tensor], dim=0)
         return infer_state_info_for_transfer_tensor
     
-    def from_transferred_tensor(self, infer_state_info_for_transfer_tensor: torch.Tensor, max_tensor_size: int):
+    @classmethod
+    def from_transferred_tensor(cls, infer_state_info_for_transfer_tensor: torch.Tensor, max_tensor_size: int):
         """
         从一个 Tensor 重构 InferStateInfoForTransfer
         """
-        self.batch_size = infer_state_info_for_transfer_tensor[0, 0].item()
-        self.total_token_num = infer_state_info_for_transfer_tensor[1, 0].item()
-        self.max_len_in_batch = infer_state_info_for_transfer_tensor[2, 0].item()
-        self.b_req_idx = infer_state_info_for_transfer_tensor[3, :self.batch_size].cuda()
-        self.b_start_loc = infer_state_info_for_transfer_tensor[4, :self.batch_size].cuda()
-        self.b_seq_len = infer_state_info_for_transfer_tensor[5, :self.batch_size].cuda()
-        self.is_prefill = infer_state_info_for_transfer_tensor[6, 0].item()
-        self.infer_state_op = TinyBatchManagerOp()
-        self.infer_state_op.batch_op_kind = infer_state_info_for_transfer_tensor[7, 0].item()
+        cls.batch_size = infer_state_info_for_transfer_tensor[0, 0].item()
+        cls.total_token_num = infer_state_info_for_transfer_tensor[1, 0].item()
+        cls.max_len_in_batch = infer_state_info_for_transfer_tensor[2, 0].item()
+        cls.b_req_idx = infer_state_info_for_transfer_tensor[3, :cls.batch_size].cuda()
+        cls.b_start_loc = infer_state_info_for_transfer_tensor[4, :cls.batch_size].cuda()
+        cls.b_seq_len = infer_state_info_for_transfer_tensor[5, :cls.batch_size].cuda()
+        cls.is_prefill = infer_state_info_for_transfer_tensor[6, 0].item()
+        cls.infer_state_op = TinyBatchManagerOp()
+        cls.infer_state_op.batch_op_kind = infer_state_info_for_transfer_tensor[7, 0].item()
         infer_state_op_size = infer_state_info_for_transfer_tensor[8, 0].item()
         infer_state_op_tensor = infer_state_info_for_transfer_tensor[9:, :infer_state_op_size]
-        self.infer_state_op.from_transferred_tensor(infer_state_op_size, infer_state_op_tensor)
-        return
+        cls.infer_state_op.from_transferred_tensor(infer_state_op_size, infer_state_op_tensor)
+        return cls
