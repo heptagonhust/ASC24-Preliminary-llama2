@@ -12,15 +12,13 @@ from model.model_metadata import (
 )
 from engine.sender import Sender
 from engine.receiver import Receiver
-from sequence.scheduler import SequenceScheduler
-from sequence.config import SchedulerConfig
+from scheduler.config import SchedulerConfig
+from scheduler.scheduler import Scheduler
 from sampler.sampling_params import SamplingParams
 from utils.utils import set_default_torch_dtype
 from utils.distributed_utils import (
     initialize_calculator_distributed,
 )
-import zmq
-import zmq.asyncio
 
 
 class Master():
@@ -35,6 +33,8 @@ class Master():
         self.parallel_config = parallel_config
         self.scheduler_config = scheduler_config
         self.device = device
+        self.batches = 0
+        self.max_batch_num = scheduler_config.max_batch_num
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_config.tokenizer, 
             trust_remote_code=self.model_config.trust_remote_code
@@ -49,65 +49,70 @@ class Master():
             model_config=self.model_config,
             parallel_config=self.parallel_config
         )
-        self.scheduler = None
+        self.scheduler = Scheduler(
+            model_config=self.model_config,
+            parallel_config=self.parallel_config,
+            scheduler_config=self.scheduler_config
+        )
     
     def start_master(self):
         self.send_queue = self.sender.start_loop()
         self.recv_queue = self.receiver.start_loop()
+        self.scheduler_pipe = self.scheduler.start_loop()
         self.rank = initialize_calculator_distributed(self.model_config, self.parallel_config)
         self._init_model()
-        self.scheduler = SequenceScheduler(
-            scheduer_config=self.scheduler_config,
-            rank=self.rank,
-            tokenizer=self.tokenizer,
-            device=self.device
-        )
     
-    def add_requests(self, requests: List[Tuple[str, int, int]]):
-        self.scheduler.add_requests(requests)
-    
+
     @torch.inference_mode()
     def run(self,
             sampling_params: SamplingParams):
         logging.info("Master started")
         self.sampling_params = sampling_params
         hidden_state = None
-        positions = None
-        seqs_id = None
-        idx = 0
-        while not self.scheduler.is_finished():
-            if self.scheduler.more_batches():
-                hidden_state, positions, seqs_id = self.scheduler.get_new_batch()
+        infer_state = None
+        # idx = 0
+        while True:
+            if self._more_batches():
+                token_ids, infer_state = self._get_batch()
             else:
-                recv_hidden_state, recv_positions, recv_seqs_id = self.recv_queue.get()
-                hidden_state, positions, seqs_id = \
-                    self._do_sample(recv_hidden_state, recv_seqs_id)
+                recv_hidden_state, recv_infer_state = self.recv_queue.get()
+                token_ids, infer_state = \
+                    self._do_sample(recv_hidden_state, recv_infer_state)
                 del recv_hidden_state
-                del recv_positions
-                del recv_seqs_id
-            if hidden_state is not None:
-                hidden_state = self.model(input_ = hidden_state,
-                                          positions = positions,
-                                          kv_caches = None,
-                                          input_metadata = None)
-                print(f"idx: {idx}, rank: {self.rank}, seqs_id: {seqs_id}")
-                idx += 1
-                self.send_queue.put((hidden_state, positions, seqs_id))
+                del recv_infer_state
+            if token_ids is not None:
+                hidden_state = self.model(
+                    input_ = token_ids,
+                    infer_state = infer_state,
+                )
+                del token_ids
+                # print(f"idx: {idx}, rank: {self.rank}, seqs_id: {seqs_id}")
+                # idx += 1
+                self.send_queue.put((hidden_state, infer_state))
+            else:
+                break
                 
         #! end of work
         self.send_queue.put((None, None, None))
         self.receiver.receiver.kill()
         return
 
+    def _more_batches(self):
+        if self.batches < self.max_batch_num:
+            self.batches += 1
+            return True
+        else:
+            return False
+
+    def _get_batch(self):
+        return self.scheduler_pipe.recv()
+
     def _do_sample(self,
                   hidden_state: torch.Tensor,
-                  seqs_id: torch.Tensor):
-        sampling_metadata = \
-            self.scheduler.get_sampling_metadata_from_seqs_id(seqs_id.tolist(),
-                                                              self.sampling_params)
-        sampler_output = self.model.sample(hidden_state, sampling_metadata)
-        return self.scheduler.update_batch(seqs_id, sampler_output)
-
+                  infer_state: torch.Tensor):
+        logits = self.model.postlayer_get_embedding(hidden_state, infer_state)
+        self.scheduler_pipe.send((logits, infer_state))
+        return self._get_batch()
 
     def _init_model(self):
         with set_default_torch_dtype(self.model_config.dtype):

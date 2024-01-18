@@ -9,8 +9,6 @@ class TinyBatchManager:
     由于 Worker 节点只应该涉及对请求 kvcache 的释放操作，
     这里的 TinyBatchManager 只需要知道哪些请求需要分配/释放 kvcache，
     分配/释放的量又有多少。这些由 BatchFreeMetadata 给出。
-
-    Master 节点上仍然使用 ModelRpcServer 和 InferBatch，不使用 TinyBatchManager。
     """
     def __init__(self, req_manager: RequestManager) -> None:
         self.req_manager = req_manager

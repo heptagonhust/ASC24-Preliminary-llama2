@@ -7,8 +7,6 @@ from model.model_metadata import (
 class SchedulerConfig():
     def __init__(
         self, 
-        model_config: ModelConfig, 
-        parallel_config: ParallelConfig, 
         dataset_path: str,
         batch_size: int,
         max_req_num: int, 
@@ -17,8 +15,8 @@ class SchedulerConfig():
         max_new_token_len: int,
         router_token_ratio: float,
     ):
-        self.model_config = model_config
-        self.parallel_config = parallel_config
+        self.model_config = None
+        self.parallel_config = None
         self.dataset_path = dataset_path
         self.batch_size = batch_size
         self.max_req_num = max_req_num

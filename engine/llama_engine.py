@@ -42,10 +42,8 @@ class LLamaEngine():
             self.worker.start_worker()
     
     def generate(self,
-                 requests: List[Tuple[str, int, int]], 
                  sampling_params: SamplingParams = None):
         if (int(os.environ["RANK"]) // self.parallel_config.tensor_parallel_size == 0):
-            self.worker.add_requests(requests)
             self.worker.run(sampling_params)
         else:
             self.worker.run()
