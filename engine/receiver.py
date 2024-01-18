@@ -58,12 +58,12 @@ def _recv(
     )
 
     recv_stream = torch.cuda.Stream()
-    recv_shape = torch.zeros([2], dtype=torch.long, device='cuda')
+    recv_shape = torch.zeros([3], dtype=torch.long, device='cuda')
     while True:
         with torch.cuda.stream(recv_stream):
             receive_from_prev_pp_stage(tensor=recv_shape, tensor_dtype=torch.long)
             print(f"rank: {dist.get_rank()}, receive start", flush=True)
-            if torch.equal(recv_shape, torch.tensor([-1, -1], device='cuda')):
+            if torch.equal(recv_shape, torch.tensor([-1, -1, -1], device='cuda')):
                 #! end of work, waiting to be killed
                 hidden_state = None
                 infer_state_tensor = None

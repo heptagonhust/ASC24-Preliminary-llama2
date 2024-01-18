@@ -58,7 +58,7 @@ def _send(
             hidden_state, infer_state_info_tensor = send_queue.get()
             print(f"rank: {dist.get_rank()}, send start", flush=True)
             if hidden_state == None:
-                send_to_next_pp_stage(torch.tensor([-1, -1], device='cuda'))
+                send_to_next_pp_stage(torch.tensor([-1, -1, -1], device='cuda'))
                 break
             else:
                 send_to_next_pp_stage(torch.tensor(hidden_state.shape, device='cuda'))
