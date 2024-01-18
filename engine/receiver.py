@@ -68,11 +68,13 @@ def _recv(
                 hidden_state = None
                 infer_state_tensor = None
             else:
-                hidden_state = receive_from_prev_pp_stage(tensor_shape=recv_shape, 
-                                           tensor_dtype=model_config.dtype)
+                hidden_state = receive_from_prev_pp_stage(
+                    tensor_shape=recv_shape, 
+                    tensor_dtype=model_config.dtype
+                )
                 #! the shape of InferStateInfoForTransfer tensor is [11, max_req_num]
                 infer_state_tensor = receive_from_prev_pp_stage(
-                    tensor_shape=torch.Tensor([11, max_req_num]),
+                    tensor_shape=torch.tensor([11, max_req_num]),
                     tensor_dtype=torch.long
                 )
             print(f"rank: {dist.get_rank()}, receive end", flush=True)
