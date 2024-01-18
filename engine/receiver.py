@@ -21,6 +21,7 @@ class Receiver():
         parallel_config: ParallelConfig,
         calculator_rank: int = int(os.environ["RANK"]),
         calculator_world_size: int = int(os.environ["WORLD_SIZE"]),
+        max_req_num: int = 10000,
     ):
         self.recv_queue = mp.Queue()
         self.receiver = mp.Process(
@@ -31,6 +32,7 @@ class Receiver():
                 self.recv_queue, 
                 model_config,
                 parallel_config,
+                max_req_num,
             )
         )
     
@@ -44,6 +46,7 @@ def _recv(
     recv_queue: mp.Queue,
     model_config: ModelConfig,
     parallel_config: ParallelConfig,
+    max_req_num: int,
     backend: str = "nccl",
 ):
     initialize_communicator_distributed(
@@ -55,23 +58,23 @@ def _recv(
     )
 
     recv_stream = torch.cuda.Stream()
-    recv_shape = torch.zeros([3], dtype=torch.long, device='cuda')
+    recv_shape = torch.zeros([2], dtype=torch.long, device='cuda')
     while True:
         with torch.cuda.stream(recv_stream):
             receive_from_prev_pp_stage(tensor=recv_shape, tensor_dtype=torch.long)
             print(f"rank: {dist.get_rank()}, receive start", flush=True)
-            if torch.equal(recv_shape, torch.tensor([-1, -1, -1], device='cuda')):
+            if torch.equal(recv_shape, torch.tensor([-1, -1], device='cuda')):
                 #! end of work, waiting to be killed
                 hidden_state = None
-                positions = None
-                seqs_id = None
+                infer_state_tensor = None
             else:
                 hidden_state = receive_from_prev_pp_stage(tensor_shape=recv_shape, 
                                            tensor_dtype=model_config.dtype)
-                positions = receive_from_prev_pp_stage(tensor_shape=recv_shape[:2], 
-                                           tensor_dtype=torch.long)
-                seqs_id = receive_from_prev_pp_stage(tensor_shape=recv_shape[:1],
-                                           tensor_dtype=torch.long)
+                #! the shape of InferStateInfoForTransfer tensor is [11, max_req_num]
+                infer_state_tensor = receive_from_prev_pp_stage(
+                    tensor_shape=torch.Tensor([11, max_req_num]),
+                    tensor_dtype=torch.long
+                )
             print(f"rank: {dist.get_rank()}, receive end", flush=True)
         torch.cuda.current_stream().wait_stream(recv_stream)
-        recv_queue.put((hidden_state, positions, seqs_id))
+        recv_queue.put((hidden_state, infer_state_tensor))

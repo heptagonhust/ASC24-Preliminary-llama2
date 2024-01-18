@@ -167,7 +167,7 @@ class TinyBatchManagerOp:
                 batch_op_metadata_tensor
             )
         
-    def from_transferred_metadata(
+    def from_transferred_tensor(
         self,
         batch_op_kind: TinyBatchManagerOpKind,
         batch_op_metadata_size: int,
