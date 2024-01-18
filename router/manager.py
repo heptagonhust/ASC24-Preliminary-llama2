@@ -91,6 +91,12 @@ class RouterManager:
         self.send_to_req_server.connect(f"ipc:///tmp/req_server.ipc")
         # self.send_to_req_server.connect(f"tcp://127.0.0.1:{req_port}")
 
+        self.recv_from_model_server = context.socket(zmq.PULL)
+        self.recv_from_model_server.bind(f"ipc:///tmp/router2.ipc")
+        
+        self.send_to_model_server = context.socket(zmq.PUSH)
+        self.send_to_model_server.bind(f"ipc:///tmp/req_server2.ipc") 
+
         # 现在正在跑的所有节点
         self.hosts = hosts
         logger.info(f"RouterManager __init__ hosts:{self.hosts}")

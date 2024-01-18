@@ -19,6 +19,8 @@ from utils.utils import set_default_torch_dtype
 from utils.distributed_utils import (
     initialize_calculator_distributed,
 )
+import zmq
+import zmq.asyncio
 
 
 class Master():
@@ -49,6 +51,13 @@ class Master():
         )
     
     def start_master(self):
+        context = zmq.asyncio.Context(2)
+        self.send_to_router = context.socket(zmq.PUSH)
+        self.send_to_router.connect(f"ipc:///tmp/router2.ipc")
+        
+        self.recv_from_router = context.socket(zmq.PULL)
+        self.recv_from_router.bind(f"ipc:///tmp/req_server2.ipc")
+        
         self.send_queue = self.sender.start_loop()
         self.recv_queue = self.receiver.start_loop()
         self.rank = initialize_calculator_distributed(self.model_config, self.parallel_config)
