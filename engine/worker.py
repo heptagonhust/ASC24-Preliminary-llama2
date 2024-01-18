@@ -15,16 +15,25 @@ from utils.distributed_utils import (
     initialize_calculator_distributed,
 )
 from manager.tiny_batch_manager import TinyBatchManager
+from model.infer_state_info import InferStateInfoForTransfer
+from manager.tiny_batch_manager_metadata import TinyBatchManagerOpKind as OpKind
+from manager.tiny_batch_manager import TinyBatchManager
 
 class Worker():
     def __init__(
         self,
         model_config: ModelConfig,
         parallel_config: ParallelConfig,
+        max_req_num: int = 10000,
         device: str = "cuda",
     ):
         self.model_config = model_config
         self.parallel_config = parallel_config
+
+        #! "max_req_num" is for fixed-length metadata transfer,
+        #! the value can be obtained from ModelRpcServer
+        #! or cmd line arguments
+        self.max_req_num = max_req_num
         self.device = device
         mp.set_start_method('spawn')
         self.sender = Sender(
@@ -32,7 +41,8 @@ class Worker():
         )
         self.receiver = Receiver(
             model_config=self.model_config,
-            parallel_config=self.parallel_config
+            parallel_config=self.parallel_config,
+            max_req_num=max_req_num
         )
     
     def start_worker(self):
@@ -40,33 +50,41 @@ class Worker():
         self.recv_queue = self.receiver.start_loop()
         self.rank = initialize_calculator_distributed(self.model_config, self.parallel_config)
         self._init_model()
+        self._init_tiny_batch_manager()
     
     @torch.inference_mode()
     def run(self):
         logging.info("Worker started")
         idx = 0
         while True:
-            # TODO: replace transferred metadata with InferStateForTransfer
-            recv_hidden_state, recv_positions, recv_seqs_id = self.recv_queue.get()
+            recv_hidden_state, recv_infer_state_tensor = self.recv_queue.get()
             if recv_hidden_state is None:
                 break
-            # TODO: add condition for TinyBatchManager
-            hidden_state = self.model(input_ = recv_hidden_state,
-                                      positions = recv_positions,
-                                      kv_caches = None,
-                                      input_metadata = None)
-            positions = recv_positions.clone()
-            seqs_id = recv_seqs_id.clone()
+
+            infer_state_tensor = recv_infer_state_tensor.clone()
+            infer_state_info = InferStateInfoForTransfer()
+            infer_state_info.from_transferred_tensor(infer_state_tensor)
+
+            if infer_state_info.infer_state_op.batch_op_kind == OpKind.FORWARD:
+                # TODO: adjust model forward args
+                hidden_state = self.model(input_ = recv_hidden_state,
+                                        positions = recv_positions,
+                                        kv_caches = None,
+                                        input_metadata = None)
+            else:
+                hidden_state = torch.zeros(recv_hidden_state.shape, dtype=self.model_config.dtype, device=self.device)
+                
+            self.tiny_batch_manager.perform_op(infer_state_info.infer_state_op)
+
             del recv_hidden_state
-            del recv_positions
-            del recv_seqs_id
-            print(f"idx: {idx}, rank: {self.rank}, seqs_id: {seqs_id}")
+            del recv_infer_state_tensor
+            print(f"idx: {idx}, rank: {self.rank}, req_id: {infer_state_info.b_req_idx}")
             idx += 1
-            self.send_queue.put((hidden_state, positions, seqs_id))
+            self.send_queue.put((hidden_state, infer_state_tensor))
                 
         #! end of work
         #! sender will stop looping after receiving None
-        self.send_queue.put((None, None, None))
+        self.send_queue.put((None, None))
         self.receiver.receiver.kill()
         return
 
