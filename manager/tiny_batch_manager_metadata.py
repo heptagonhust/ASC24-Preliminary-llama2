@@ -13,13 +13,12 @@ class TinyBatchManagerOpKind(enum.Enum):
     """
 
     """
-    FORWARD 包括 prefill 和 decode 操作，
-    当 pp 节点收到 FORWARD 操作时，直接进行模型前向。
+    DO_NOTHING 用于表示一次模型前向没有外带任何 kvcache 操作
     """
-    FORWARD = 0
+    DO_NOTHING = 0
 
     """
-    以下操作都只对 ReqManager 进行相应的 alloc 和 free 操作，不进行模型前向。
+    以下操作都会在模型前向之前，对 ReqManager 进行相应的 alloc 和 free 操作。
     元数据会在下面以类的形式给出。
 
     一个需要注意的是，MERGE 不需要在 pp 节点间传递，因为它没有对 ReqManager
@@ -137,7 +136,7 @@ class TinyBatchManagerOp:
             BatchFilterMetadata,
             BatchPauseMetadata,
             BatchRemoveMetadata,
-            None # for FORWARD
+            None # for DO_NOTHING
         ] = None
     
     def to_tensor_for_transfer(self, max_tensor_size: int):
@@ -146,7 +145,7 @@ class TinyBatchManagerOp:
 
         通信格式：(batch_op_kind, batch_op_metadata_size, batch_op_metadata_tensor)
         """
-        if self.batch_op_kind is TinyBatchManagerOpKind.FORWARD:
+        if self.batch_op_kind is TinyBatchManagerOpKind.DO_NOTHING:
             return (
                 self.batch_op_kind,
                 0,
@@ -174,7 +173,7 @@ class TinyBatchManagerOp:
         batch_op_metadata_tensor: torch.Tensor
     ):
         self.batch_op_kind = batch_op_kind
-        if self.batch_op_kind is TinyBatchManagerOpKind.FORWARD:
+        if self.batch_op_kind is TinyBatchManagerOpKind.DO_NOTHING:
             self.batch_op_metadata = None
         elif self.batch_op_kind is TinyBatchManagerOpKind.INIT:
             self.batch_op_metadata = BatchInitMetadata()

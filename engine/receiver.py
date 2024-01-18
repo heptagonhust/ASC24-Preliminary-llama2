@@ -74,7 +74,7 @@ def _recv(
                 )
                 #! the shape of InferStateInfoForTransfer tensor is [11, max_req_num]
                 infer_state_tensor = receive_from_prev_pp_stage(
-                    tensor_shape=torch.tensor([11, max_batch_size]),
+                    tensor_shape=torch.tensor([12, max_batch_size]),
                     tensor_dtype=torch.long
                 )
             print(f"rank: {dist.get_rank()}, receive end", flush=True)

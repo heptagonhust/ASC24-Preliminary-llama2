@@ -61,16 +61,16 @@ class Worker():
                 break
 
             infer_state_tensor = recv_infer_state.clone()
-            infer_state = InferStateInfoForTransfer.from_transferred_tensor(infer_state_tensor)
+            infer_state: InferStateInfoForTransfer = \
+                InferStateInfoForTransfer.from_transferred_tensor(infer_state_tensor)
 
-            if infer_state.infer_state_op.batch_op_kind == OpKind.FORWARD:
+            self.tiny_batch_manager.perform_op(infer_state.infer_state_op)
+            if infer_state.infer_state_op.batch_op_kind != OpKind.PAUSE:
                 # TODO: adjust model forward args
                 hidden_state = self.model(
                     input_ = recv_hidden_state,
                     infer_state = infer_state,
                 )
-
-            self.tiny_batch_manager.perform_op(infer_state.infer_state_op)
 
             del recv_hidden_state
             del recv_infer_state

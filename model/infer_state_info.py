@@ -70,6 +70,7 @@ class InferStateInfoForTransfer:
     """
 
     def __init__(self):
+        self.batch_id = None
         self.batch_size = None
         self.total_token_num = None
         self.max_len_in_batch = None
@@ -79,7 +80,7 @@ class InferStateInfoForTransfer:
         self.is_prefill = None
 
         '''
-        members for ReqManager operations in a batch
+        一个前向操作附带的 kvcache 操作，在前向操作之前进行
         '''
         self.infer_state_op: TinyBatchManagerOp = None
     
@@ -91,15 +92,16 @@ class InferStateInfoForTransfer:
                                 (0, max_tensor_size - x.shape[0]), "constant", 0).cuda()
         infer_state_op_size, infer_state_op_tensor = \
             self.infer_state_op.to_tensor_for_transfer(max_tensor_size)
-        metadata_list = [torch.Tensor([self.batch_size]),
-             torch.Tensor([self.total_token_num]),
-             torch.Tensor([self.max_len_in_batch]),
+        metadata_list = [torch.tensor([self.batch_id]),
+             torch.tensor([self.batch_size]),
+             torch.tensor([self.total_token_num]),
+             torch.tensor([self.max_len_in_batch]),
              self.b_req_idx,
              self.b_start_loc,
              self.b_seq_len,
-             torch.Tensor([self.is_prefill]),
-             torch.Tensor([self.infer_state_op.batch_op_kind]),
-             torch.Tensor([infer_state_op_size])]
+             torch.tensor([self.is_prefill]),
+             torch.tensor([self.infer_state_op.batch_op_kind]),
+             torch.tensor([infer_state_op_size])]
         metadata_list = [pad_f(x) for x in metadata_list]
         infer_state_info_for_transfer_tensor = torch.stack(metadata_list, dim=0)
         infer_state_info_for_transfer_tensor: torch.Tensor = \
@@ -111,16 +113,17 @@ class InferStateInfoForTransfer:
         """
         从一个 Tensor 重构 InferStateInfoForTransfer
         """
-        cls.batch_size = infer_state_info_for_transfer_tensor[0, 0].item()
-        cls.total_token_num = infer_state_info_for_transfer_tensor[1, 0].item()
-        cls.max_len_in_batch = infer_state_info_for_transfer_tensor[2, 0].item()
-        cls.b_req_idx = infer_state_info_for_transfer_tensor[3, :cls.batch_size].cuda()
-        cls.b_start_loc = infer_state_info_for_transfer_tensor[4, :cls.batch_size].cuda()
-        cls.b_seq_len = infer_state_info_for_transfer_tensor[5, :cls.batch_size].cuda()
-        cls.is_prefill = infer_state_info_for_transfer_tensor[6, 0].item()
+        cls.batch_id = infer_state_info_for_transfer_tensor[0, 0].item()
+        cls.batch_size = infer_state_info_for_transfer_tensor[1, 0].item()
+        cls.total_token_num = infer_state_info_for_transfer_tensor[2, 0].item()
+        cls.max_len_in_batch = infer_state_info_for_transfer_tensor[3, 0].item()
+        cls.b_req_idx = infer_state_info_for_transfer_tensor[4, :cls.batch_size].cuda()
+        cls.b_start_loc = infer_state_info_for_transfer_tensor[5, :cls.batch_size].cuda()
+        cls.b_seq_len = infer_state_info_for_transfer_tensor[6, :cls.batch_size].cuda()
+        cls.is_prefill = infer_state_info_for_transfer_tensor[7, 0].item()
         cls.infer_state_op = TinyBatchManagerOp()
-        cls.infer_state_op.batch_op_kind = infer_state_info_for_transfer_tensor[7, 0].item()
-        infer_state_op_size = infer_state_info_for_transfer_tensor[8, 0].item()
-        infer_state_op_tensor = infer_state_info_for_transfer_tensor[9:, :infer_state_op_size]
+        cls.infer_state_op.batch_op_kind = infer_state_info_for_transfer_tensor[8, 0].item()
+        infer_state_op_size = infer_state_info_for_transfer_tensor[9, 0].item()
+        infer_state_op_tensor = infer_state_info_for_transfer_tensor[10:, :infer_state_op_size]
         cls.infer_state_op.from_transferred_tensor(infer_state_op_size, infer_state_op_tensor)
         return cls

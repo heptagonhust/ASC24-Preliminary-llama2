@@ -4,6 +4,10 @@ from typing import List, Tuple
 import torch
 import torch.multiprocessing as mp
 from transformers import AutoTokenizer
+from manager.tiny_batch_manager import TinyBatchManager
+from model.infer_state_info import InferStateInfoForTransfer
+from manager.tiny_batch_manager_metadata import TinyBatchManagerOpKind as OpKind
+
 
 from model.llama import LlamaForCausalLM
 from model.model_metadata import (
@@ -34,7 +38,7 @@ class Master():
         self.scheduler_config = scheduler_config
         self.device = device
         self.batches = 0
-        self.max_batch_num = scheduler_config.max_batch_num
+        self.max_batch_num = scheduler_config.max_req_num
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_config.tokenizer, 
             trust_remote_code=self.model_config.trust_remote_code
@@ -61,6 +65,7 @@ class Master():
         self.scheduler_pipe = self.scheduler.start_loop()
         self.rank = initialize_calculator_distributed(self.model_config, self.parallel_config)
         self._init_model()
+        self._init_tiny_batch_manager()
     
 
     @torch.inference_mode()
@@ -81,10 +86,12 @@ class Master():
                 del recv_hidden_state
                 del recv_infer_state
             if token_ids is not None:
-                hidden_state = self.model(
-                    input_ = token_ids,
-                    infer_state = infer_state,
-                )
+                self.tiny_batch_manager.perform_op(infer_state.infer_state_op)
+                if infer_state.infer_state_op.batch_op_kind != OpKind.PAUSE:
+                    hidden_state = self.model(
+                        input_ = token_ids,
+                        infer_state = infer_state,
+                    )
                 del token_ids
                 # print(f"idx: {idx}, rank: {self.rank}, seqs_id: {seqs_id}")
                 # idx += 1
@@ -120,3 +127,8 @@ class Master():
             model.to(device=self.device)
             model.load_weights(self.model_config.model)
         self.model = model
+    
+    def _init_tiny_batch_manager(self):
+        self.tiny_batch_manager = TinyBatchManager(
+            req_manager=self.model.req_manager
+        )

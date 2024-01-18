@@ -3,10 +3,10 @@ from manager.tiny_batch_manager_metadata import *
 
 class TinyBatchManager:
     """
-    在每个 Worker pp 节点上，用于管理 ReqManager 的类。其作用对应了 lightllm 的
+    在每个 pp 节点上（包括 Master 和 Worker），用于管理 ReqManager 的类。其作用对应了 lightllm 的
     ModelRpcServer 和 InferBatch，主要涉及对每个请求 kvcache 的管理和释放。
 
-    由于 Worker 节点只应该涉及对请求 kvcache 的释放操作，
+    由于各个 pp 节点只应该涉及对请求 kvcache 的释放操作，
     这里的 TinyBatchManager 只需要知道哪些请求需要分配/释放 kvcache，
     分配/释放的量又有多少。这些由 BatchFreeMetadata 给出。
     """
@@ -20,13 +20,13 @@ class TinyBatchManager:
         self.req_manager.alloc(batch_init_metadata.need_alloc_size)
         return
     
-    def _remove_batch(self, batch_free_metadata: BatchFreeMetadata):
+    def _remove_batch(self, batch_remove_metadata: BatchRemoveMetadata):
         """
         释放一个 batch 的所有 kvcache
         """
         free_req_idx = []
         free_token_idx = []
-        for req_idx, cur_kv_len in batch_free_metadata.req_list_to_free:
+        for req_idx, cur_kv_len in batch_remove_metadata.req_list_to_free:
             free_req_idx.append(req_idx)
             free_token_idx.append(self.req_manager.req_to_token_indexs[req_idx][:cur_kv_len])
         free_token_idx = torch.cat(free_token_idx, dim=-1)
@@ -66,7 +66,7 @@ class TinyBatchManager:
             self._pause_batch(tiny_batch_manager_op.batch_op_metadata)
         elif tiny_batch_manager_op.batch_op_kind == TinyBatchManagerOpKind.REMOVE:
             self._remove_batch(tiny_batch_manager_op.batch_op_metadata)
-        elif tiny_batch_manager_op.batch_op_kind == TinyBatchManagerOpKind.FORWARD:
+        elif tiny_batch_manager_op.batch_op_kind == TinyBatchManagerOpKind.DO_NOTHING:
             pass
         else:
             raise ValueError(f"Unknown batch_op_kind: {tiny_batch_manager_op.batch_op_kind}")
