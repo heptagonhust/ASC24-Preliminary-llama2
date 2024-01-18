@@ -362,8 +362,10 @@ class LlamaForCausalLM(nn.Module):
         if self.pp_rank == 0:
             self.lm_head = ParallelLMHead(config.vocab_size, config.hidden_size)
             self.sampler = Sampler(config.vocab_size)
-            self._init_mem_manager()
-            self._init_req_manager()
+
+        #! mem/req manager is distributed
+        self._init_mem_manager()
+        self._init_req_manager()
 
     def _init_config(self):
         with open(os.path.join(self.weight_dir, "config.json"), 'r') as json_file:
@@ -388,7 +390,8 @@ class LlamaForCausalLM(nn.Module):
         self.mem_manager = MemoryManager(self.max_total_token_num,dtype=torch.float16,
                                          head_num=self.config["num_key_value_heads"] // self.tp_size,
                                          head_dim=self.config["hidden_size"] // self.config["num_attention_heads"],
-                                         layer_num=self.config["num_hidden_layers"])
+                                         layer_num=get_pipeline_model_parallel_layer_num(
+                                             self.config["num_hidden_layers"]))
         return
     
     def _init_req_manager(self):
@@ -612,14 +615,7 @@ class LlamaForCausalLM(nn.Module):
         logic_batch = torch.mm(self.lm_head.weight, last_input)
 
         
-        gather_data = None
-        if self.tp_size == 1:
-            gather_data = logic_batch
-        else:
-            gather_data = torch.empty((self.vocab_size, token_num), device=logic_batch.device, dtype=torch.float16)
-            split_size = self.vocab_size // self.tp_size
-            dist.all_gather([gather_data[i * split_size: (i + 1) * split_size, :]
-                            for i in range(self.tp_size)], logic_batch, group=None, async_op=False)
+        gather_data = logic_batch
 
         logic_batch = None
 

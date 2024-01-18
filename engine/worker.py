@@ -14,7 +14,7 @@ from utils.utils import set_default_torch_dtype
 from utils.distributed_utils import (
     initialize_calculator_distributed,
 )
-
+from manager.tiny_batch_manager import TinyBatchManager
 
 class Worker():
     def __init__(
@@ -46,9 +46,11 @@ class Worker():
         logging.info("Worker started")
         idx = 0
         while True:
+            # TODO: replace transferred metadata with InferStateForTransfer
             recv_hidden_state, recv_positions, recv_seqs_id = self.recv_queue.get()
             if recv_hidden_state is None:
                 break
+            # TODO: add condition for TinyBatchManager
             hidden_state = self.model(input_ = recv_hidden_state,
                                       positions = recv_positions,
                                       kv_caches = None,
@@ -74,3 +76,8 @@ class Worker():
             model.to(device=self.device)
             model.load_weights(self.model_config.model)
         self.model = model
+
+    def _init_tiny_batch_manager(self):
+        self.tiny_batch_manager = TinyBatchManager(
+            req_manager=self.model.req_manager
+        )
