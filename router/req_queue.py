@@ -107,11 +107,11 @@ class ReqQueue:
                 aborted_count += 1
                 continue
             req_first_router_need_tokens = req.get_first_router_need_tokens()
-            logger.info(f"""req: {req.request_id}
-first_router_need_tokens: {req_first_router_need_tokens}
-cur_batch_decode_need_tokens: {cur_batch_decode_need_tokens}
-new_batch_first_router_need_tokens: {new_batch_first_router_need_tokens}
-batch_max_tokens: {self.batch_max_tokens}""")
+#             logger.info(f"""req: {req.request_id}
+# first_router_need_tokens: {req_first_router_need_tokens}
+# cur_batch_decode_need_tokens: {cur_batch_decode_need_tokens}
+# new_batch_first_router_need_tokens: {new_batch_first_router_need_tokens}
+# batch_max_tokens: {self.batch_max_tokens}""")
             if self._can_add_new_req(req, is_busy) and cur_batch_decode_need_tokens + new_batch_first_router_need_tokens + req_first_router_need_tokens <= self.batch_max_tokens:
                 can_run_list.append(req)
                 new_batch_first_router_need_tokens += req_first_router_need_tokens

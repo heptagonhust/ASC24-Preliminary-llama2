@@ -59,7 +59,8 @@ class RequestEngine():
         
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_config.model,
-            trust_remote_code=True
+            trust_remote_code=True,
+            use_fast=True,
         )
 
         self.req_id_to_out_map = {}  # value type (out_str, metadata, finished)
@@ -80,6 +81,7 @@ class RequestEngine():
         # 将 sampling_params 的 max_tokens 设置为 output_len
         sampling_params = self.sampling_params
         sampling_params.max_tokens = output_len
+        sampling_params.ignore_eos = True
 
         # logger.info(f"sending request_id:{request_id}, output_len:{output_len}")
         self.send_to_router.send_pyobj((request_id, prompt_ids, sampling_params, 0, None))
@@ -96,15 +98,13 @@ class RequestEngine():
             async with self.req_id_to_out_map_lock:
                 req_status = self.req_id_to_out_map.get(req_id)
                 req_status.out_token_info_list.append((out_ids, out_metadata, finished))
-                if finished:
-                    self.progress_bar.update(1)
                     
 
 
     def generate(self, requests: List[Tuple[str, int, int]], 
                  sampling_params: SamplingParams = None):
         logger.info("generating...")
-        self.progress_bar = tqdm(total=len(requests), desc="generating")
+        # self.progress_bar = tqdm(total=len(requests), desc="generating")
         asyncio.run(self.process_dataset(requests))
     
     async def process_dataset(self, dataset):

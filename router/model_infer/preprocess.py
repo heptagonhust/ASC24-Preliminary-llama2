@@ -52,7 +52,7 @@ def prepare_prefill_inputs(batch: InferBatch):
         nopad_b_seq_len = torch.tensor(nopad_b_seq_len, dtype=torch.int32, device='cuda')
         b_seq_len_numpy = nopad_b_seq_len.cpu().numpy()
 
-        logger.info(f"nopad_b_seq_len: {nopad_b_seq_len}\nnopad_b_start_loc: {nopad_b_start_loc}\nnopad_b_req_idx: {nopad_b_req_idx}")
+        # logger.info(f"nopad_b_seq_len: {nopad_b_seq_len}\nnopad_b_start_loc: {nopad_b_start_loc}\nnopad_b_req_idx: {nopad_b_req_idx}")
 
         kwargs = {
             "batch_size": len(batch),

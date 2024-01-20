@@ -11,6 +11,8 @@ from router.pause_strategy import Fcfs, select_paused_reqs
 from rpyc.utils.classic import obtain
 import rpyc
 
+import tqdm
+
 
 from transformers import AutoTokenizer
 
@@ -69,7 +71,8 @@ class RouterManager:
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_dir,
-            trust_remote_code=True
+            trust_remote_code=True,
+            use_fast=True,
         )
 
         self.model_llama_config = model_llama_config
@@ -94,6 +97,10 @@ class RouterManager:
         # 现在正在跑的所有节点
         self.hosts = hosts
         logger.info(f"RouterManager __init__ hosts:{self.hosts}")
+
+        self.progress_bar = tqdm.tqdm(total=10000, desc="generating")
+
+        self.total_output_token_num = 0
 
         return
 
@@ -273,11 +280,14 @@ class RouterManager:
         self._update_out_status_to_batch(batch, req_to_out_status)
         unfinished_req_ids, finished_req_ids = batch.mark_and_get_finished_req_and_preupdate_status(self.eos_id)
         
-        logger.info(f"batch: {batch.batch_id}, req_id and has_generate_finished: {[(req.request_id, req.has_generate_finished) for req in batch.reqs]}")
+        # logger.info(f"batch: {batch.batch_id}, req_id and has_generate_finished: {[(req.request_id, req.has_generate_finished) for req in batch.reqs]}")
          
         # self._send_to_detokenization_proc(batch, req_to_out_status)
         detokenize_res = self._detokenize(batch, req_to_out_status)
-        logger.info(f"detokenize_res: {detokenize_res}")
+        # logger.info(f"detokenize_res: {detokenize_res}")
+        for _ in range(len(detokenize_res)):
+            self.progress_bar.update(1)
+        self.total_output_token_num += sum([len(res[1]) for res in detokenize_res])
         for res in detokenize_res:
             self.send_to_req_server.send_pyobj(res)
         batch.filter_out_finished_req(unfinished_req_ids, finished_req_ids)
@@ -299,12 +309,14 @@ class RouterManager:
         self._update_out_status_to_batch(batch, req_to_out_status)
         unfinished_req_ids, finished_req_ids = batch.mark_and_get_finished_req_and_preupdate_status(self.eos_id)
 
-        logger.info(f"batch: {batch.batch_id}, req_id and has_generate_finished: {[(req.request_id, req.has_generate_finished) for req in batch.reqs]}")
+        # logger.info(f"batch: {batch.batch_id}, req_id and has_generate_finished: {[(req.request_id, req.has_generate_finished) for req in batch.reqs]}")
 
         detokenize_res = self._detokenize(batch, req_to_out_status)
-        logger.info(f"detokenize_res: {detokenize_res}")
+        # logger.info(f"detokenize_res: {detokenize_res}")
+        self.progress_bar.update(len(detokenize_res))
         for res in detokenize_res:
-            self.send_to_req_server.send_pyobj(res)
+            # self.send_to_req_server.send_pyobj(res)
+            pass
         batch.filter_out_finished_req(unfinished_req_ids, finished_req_ids)
         await self._handle_finish_req(batch, unfinished_req_ids, finished_req_ids)
         return

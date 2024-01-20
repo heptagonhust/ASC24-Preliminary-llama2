@@ -28,11 +28,11 @@ if __name__ == "__main__":
     parallel_config_llama = ParallelConfig(pipeline_parallel_size = 1, tensor_parallel_size = 4)
     port_config = PortConfig(router_port=55555, req_server_port=55556, rpc_base_port=rpc_base_port)
     sampling_params = SamplingParams(temperature=1.0, top_p=1.00, max_tokens=512)
-    req_config = ReqConfig(batch_size=25000,
-                           max_total_token_num=50000,
+    req_config = ReqConfig(batch_size=10240,
+                           max_total_token_num=114514,
                            max_req_num=10000,
                            max_req_total_len=2048+512,
-                           router_token_ratio=0.7,
+                           router_token_ratio=1,
                            router_max_new_token_len=2048)
 
 

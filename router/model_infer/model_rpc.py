@@ -98,7 +98,6 @@ class ModelRpcServer(rpyc.Service):
         return
     
     def exposed_add_batch(self, batch_id, reqs, dtype):
-        logger.info(f"entering add_batch in rpc server")
         if self.parallel_config.world_size != 1:
             batch_id, reqs, dtype = obtain(batch_id), obtain(reqs), obtain(dtype)
         import torch
@@ -123,7 +122,6 @@ class ModelRpcServer(rpyc.Service):
         return self.forward(batch_id, is_prefill=False)
 
     def exposed_filter_batch(self, batch_id, req_id_list, finished_req_id_list):
-        logger.info(f"entering filter_batch in rpc server")
         if self.parallel_config.world_size != 1:
             batch_id, req_id_list, finished_req_id_list = obtain(batch_id), obtain(req_id_list), obtain(finished_req_id_list)
         batch = self.cache.pop(batch_id)
@@ -314,7 +312,7 @@ class ModelRpcClient:
             return ans
 
     async def filter_batch(self, batch_id, req_id_list, finished_req_id_list):
-        logger.info(f"entering filter_batch in rpc client")
+        # logger.info(f"entering filter_batch in rpc client")
         ans = self._filter_batch(batch_id, req_id_list, finished_req_id_list)
         if self.use_rpc:
             await ans
@@ -323,6 +321,7 @@ class ModelRpcClient:
             return 
 
     async def pause_reqs(self, batch_id, reqs_list):
+        logger.info(f"batch {batch_id} pausing req {[rid for rid, _ in reqs_list]}")
         ans = self._pause_reqs(batch_id, reqs_list)
         if self.use_rpc:
             await ans

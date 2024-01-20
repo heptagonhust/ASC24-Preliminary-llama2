@@ -602,7 +602,7 @@ class LlamaForCausalLM(nn.Module):
 
         logic_batch = None
 
-        print(f"gather_data: {gather_data.shape}, {gather_data}")
+        # print(f"gather_data: {gather_data.shape}, {gather_data}")
 
         if not return_logits:
             prob_out = torch.softmax(gather_data.permute(1, 0).float(), dim=-1)
