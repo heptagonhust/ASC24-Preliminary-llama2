@@ -2,6 +2,7 @@ from sampler.sampling_params import SamplingParams, SamplingType
 from sequence.sequence import SequenceData, Sequence
 from typing import Dict, List, Tuple
 from dataclasses import dataclass
+from utils.utils import _async_h2d
 import torch
 
 _SAMPLING_EPS = 1e-5
@@ -244,9 +245,7 @@ class SamplingTensors:
             output_tokens=output_tensor.to(device=device, non_blocking=True),
         )
 
-def _async_h2d(data: list, dtype, pin_memory):
-    t = torch.tensor(data, dtype=dtype, pin_memory=pin_memory)
-    return t.to(device="cuda", non_blocking=True)
+
 
 def _prepare_sample(
     seq: Sequence,
@@ -328,3 +327,4 @@ def prepare_sample(
             categorized_sample_indices=categorized_sample_indices,
         )
         return sampling_metadata
+

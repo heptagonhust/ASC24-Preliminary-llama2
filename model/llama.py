@@ -33,7 +33,7 @@ from transformers import LlamaConfig
 
 from model.model_metadata import InputMetadata
 from model.layers.activate import SiluAndMul
-from model.layers.attention import GroupAttention
+from model.layers.attention import PagedAttention
 from model.layers.layernorm import RMSNorm
 from model.layers.linear import (
     LinearMethodBase, 
@@ -41,7 +41,7 @@ from model.layers.linear import (
     QKVParallelLinear,
     RowParallelLinear
 )
-from model.layers.embedding import RotaryEmbedding
+from model.layers.embedding import RotaryEmbedding, get_rope
 from sampler.sampler import Sampler
 from model.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding, 
@@ -145,16 +145,22 @@ class LlamaAttention(nn.Module):
             linear_method=linear_method,
         )
 
-        self.rotary_emb = RotaryEmbedding(
-            head_dim=self.head_dim,
-            max_position_embeddings=max_position_embeddings,
+        self.rotary_emb = get_rope(
+            self.head_dim,
+            rotary_dim=self.head_dim,
+            max_position=max_position_embeddings,
             base=rope_theta,
+            rope_scaling=rope_scaling,
         )
 
-        self.attn = GroupAttention(self.num_heads,
+        # self.attn = GroupAttention(self.num_heads,
+        #                            self.head_dim,
+        #                            self.scaling,
+        #                            max_position_embeddings = max_position_embeddings,
+        #                            num_kv_heads=self.num_kv_heads)
+        self.attn = PagedAttention(self.num_heads,
                                    self.head_dim,
                                    self.scaling,
-                                   max_position_embeddings = max_position_embeddings,
                                    num_kv_heads=self.num_kv_heads)
 
     def forward(
@@ -175,16 +181,10 @@ class LlamaAttention(nn.Module):
         Returns:
             torch.Tensor: _description_
         """
-        #! qkv: [batch_size, seq_len, tp_q_size + 2 * tp_kv_size]
         qkv = self.qkv_proj(hidden_states)
-        #! q: [batch_size, seq_len, tp_q_size]
-        #! k,v: [batch_size, seq_len, tp_kv_size]
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
-        #! rotary embedding encoding for key & value
         q, k = self.rotary_emb(positions, q, k)
-        # k_cache, v_cache = kv_cache
-        k_cache = None
-        v_cache = None
+        k_cache, v_cache = kv_cache
         attn_output = self.attn(q, k, v, k_cache, v_cache, input_metadata)
         output = self.o_proj(attn_output)
         return output
@@ -294,7 +294,7 @@ class LlamaModel(nn.Module):
             hidden_states, residual = layer(
                 positions,
                 hidden_states,
-                None,
+                kv_caches[i],
                 input_metadata,
                 residual,
             )

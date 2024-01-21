@@ -11,6 +11,7 @@ from model.parallel_utils.communication_op import (
     send_to_next_pp_stage,
     pp_batch_send_or_recv,
 )
+from scheduler.input_metadata import InputMetadata
 
 #! CUDA tensor consumer, required to release sent tensors
 #!  reference count
@@ -52,21 +53,42 @@ def _send(
     )
 
     send_stream = torch.cuda.Stream()
+    hidden_state: torch.Tensor = None
+    input_positions: torch.Tensor = None
+    input_metadata: InputMetadata = None
+    idx = 0
     while True:
         with torch.cuda.stream(send_stream):
+            hidden_state, input_positions, input_metadata = send_queue.get()
             #! send_tensors include hidden_state, positions, seqs_id
-            hidden_state, positions, seqs_id = send_queue.get()
-            print(f"rank: {dist.get_rank()}, send start", flush=True)
             if hidden_state == None:
                 send_to_next_pp_stage(torch.tensor([-1, -1, -1], device='cuda'))
                 break
             else:
+                #! sending prompt metadata
                 send_to_next_pp_stage(torch.tensor(hidden_state.shape, device='cuda'))
-                send_to_next_pp_stage(hidden_state)
-                send_to_next_pp_stage(positions)
-                send_to_next_pp_stage(seqs_id)
-            print(f"rank: {dist.get_rank()}, send finished", flush=True)
+                if input_metadata.is_prompt:
+                    send_to_next_pp_stage(torch.tensor([0, 0, 0], device='cuda'))
+                    send_to_next_pp_stage(hidden_state)
+                    del hidden_state
+                    send_to_next_pp_stage(input_positions)
+                    del input_positions
+                    send_to_next_pp_stage(input_metadata.slot_mapping)
+                    send_to_next_pp_stage(
+                        torch.tensor(input_metadata.prompt_lens, device='cuda')
+                    )
+                    del input_metadata
+                #! sending decode metadata
+                else:
+                    send_to_next_pp_stage(torch.tensor(input_metadata.block_tables.shape, device='cuda'))
+                    send_to_next_pp_stage(hidden_state)
+                    del hidden_state
+                    send_to_next_pp_stage(input_positions)
+                    del input_positions
+                    send_to_next_pp_stage(input_metadata.slot_mapping)
+                    send_to_next_pp_stage(input_metadata.context_lens)
+                    send_to_next_pp_stage(input_metadata.block_tables)
+                    del input_metadata
+
+            idx += 1
         torch.cuda.current_stream().wait_stream(send_stream)
-        del hidden_state
-        del positions
-        del seqs_id

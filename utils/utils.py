@@ -2,13 +2,17 @@
 # Adapted from
 # https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/tensor_parallel/utils.py
 # Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+import enum
 import random
 import contextlib
-from typing import Sequence, Any, Dict, Optional
+from typing import Sequence, Any, Dict, Optional, Union, List
 
 import torch
 import numpy as np
 
+class Device(enum.Enum):
+    GPU = enum.auto()
+    CPU = enum.auto()
 
 def ensure_divisibility(numerator, denominator):
     """Ensure that numerator is divisible by the denominator."""
@@ -83,3 +87,27 @@ def set_random_seed(seed: int):
     torch.manual_seed(seed)
     np.random.seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+_PAD_SLOT_ID = -1
+
+def _async_h2d(data: list, dtype, pin_memory):
+    t = torch.tensor(data, dtype=dtype, pin_memory=pin_memory)
+    return t.to(device="cuda", non_blocking=True)
+
+def _pad_to_max(x: List[int], max_len: int, pad: int) -> List[int]:
+    assert len(x) <= max_len
+    return x + [pad] * (max_len - len(x))
+
+def _make_tensor_with_pad(
+    x: List[List[int]],
+    max_len: int,
+    pad: int,
+    dtype: torch.dtype,
+    device: Union[str, torch.device] = "cuda",
+    pin_memory: bool = False,
+) -> torch.Tensor:
+    padded_x = [_pad_to_max(x_i, max_len, pad) for x_i in x]
+    return torch.tensor(padded_x,
+                        dtype=dtype,
+                        device=device,
+                        pin_memory=pin_memory and str(device) == "cpu")

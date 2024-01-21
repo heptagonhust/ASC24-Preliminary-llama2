@@ -1,6 +1,6 @@
-from typing import Optional
-from transformers import (AutoConfig, PretrainedConfig ,AutoModelForCausalLM, 
-                          AutoTokenizer, PreTrainedTokenizerBase,LlamaConfig)
+from typing import Optional, Optional
+from transformers import (AutoConfig, PretrainedConfig,)
+from utils.transformers_utils import *
 
 def get_config_from_hf(
     model: str,
@@ -37,9 +37,4 @@ def get_max_len_from_hf(
         else :
              max_len = max_len_hf
     return int(max_len)
-    
-            
-            
-    
-        
     
