@@ -26,13 +26,7 @@ class ParallelConfig:
         self.world_size = pipeline_parallel_size * tensor_parallel_size
         if self.world_size > 1:
             self.worker_use_ray = True
-        self._verify_args()
 
-    def _verify_args(self) -> None:
-        if self.pipeline_parallel_size > 1:
-            raise NotImplementedError(
-                "Pipeline parallelism is not supported yet.")
-            
 
 class ModelConfig:
     def __init__(
@@ -52,6 +46,30 @@ class ModelConfig:
         self.max_model_len = get_max_len_from_hf(self.hf_model_config, max_model_len)
         
         self.dtype = torch.float16
+
+    def get_head_size(self) -> int:
+        # FIXME(woosuk): This may not be true for all models.
+        return self.hf_model_config.hidden_size // self.hf_model_config.num_attention_heads
+    
+    def get_total_num_kv_heads(self) -> int:
+        return self.hf_model_config.num_key_value_heads
+
+    def get_num_kv_heads(self, parallel_config: ParallelConfig) -> int:
+        """Returns the number of KV heads per GPU."""
+        total_num_kv_heads = self.get_total_num_kv_heads()
+        # If tensor parallelism is used, we divide the number of KV heads by
+        # the tensor parallel size. We will replicate the KV heads in the
+        # case where the number of KV heads is smaller than the tensor
+        # parallel size so each GPU has at least one KV head.
+        return max(1,
+                   total_num_kv_heads // parallel_config.tensor_parallel_size)
+
+    def get_total_layers(self) -> int:
+        return self.hf_model_config.num_hidden_layers
+
+    # def get_num_layers(self, parallel_config: ParallelConfig, pp_rank: int) -> int:
+    #     total_num_hidden_layers = self.hf_model_config.num_hidden_layers
+    #     return total_num_hidden_layers // parallel_config.pipeline_parallel_size
 
 
 class InputMetadata:
